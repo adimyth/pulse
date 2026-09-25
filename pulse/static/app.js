@@ -14,6 +14,7 @@ const drawing = canvas.getContext("2d");
 const signalCanvas = document.querySelector("#signal-wave");
 const signalDrawing = signalCanvas.getContext("2d");
 const pressureBlock = document.querySelector(".pressure");
+const signalArea = document.querySelector(".signal-area");
 const tones = { frustration: "#ef5c5f", positive: "#e5c23e", surprise: "#bc8def", uncertainty: "#7aa6ff", low_mood: "#758290", neutral: "#b5bbc5" };
 const nonSpeechCaptions = new Set(["blank audio", "silence", "howling wind", "wind", "wind blowing", "crowd cheer", "crowd cheering", "cheering", "applause", "engine revving", "engine reving", "keyboard clicking", "typing", "background noise", "music", "laughter", "non english speech", "speaking in foreign language", "foreign language"]);
 const WAVE_SAMPLE_WINDOW = .025;
@@ -130,6 +131,7 @@ function appendWaveSample(amplitude) {
   if (!state.currentWaveOpen && amplitude >= SPEECH_WAVE_THRESHOLD) {
     state.currentWave = [];
     state.currentWaveOpen = true;
+    signalArea.dataset.speaking = "true";
     setText("#current-wave-state", "Speaking");
   }
   if (state.currentWaveOpen) {
@@ -154,6 +156,7 @@ function finishCurrentWave() {
   if (!state.currentWaveOpen && !state.currentWave.length) return;
   state.currentWaveOpen = false;
   state.currentWave = [];
+  signalArea.dataset.speaking = "false";
   setText("#current-wave-state", "Awaiting speech");
 }
 
@@ -254,6 +257,7 @@ function resetDisplay() {
   state.waveFramePeak = 0;
   state.waveFrameSamples = 0;
   state.currentWaveOpen = false;
+  signalArea.dataset.speaking = "false";
   transcript.textContent = "Press start and speak naturally.";
   transcript.style.color = "#707070";
   meters.forEach(meter => { meter.dataset.active = "false"; meter.querySelector("strong").textContent = "—"; meter.querySelector("b").style.width = "0%"; });
