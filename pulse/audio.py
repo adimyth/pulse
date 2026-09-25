@@ -16,14 +16,16 @@ from subprocess import DEVNULL, Popen
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
-from .model import PulseClassifier, SentimentResult
+from .labels import DIMENSIONS, DISPLAY_NAMES
+from .model import PulseClassifier, SentimentResult, SentimentScore
 
 
 SAMPLE_RATE = 16_000
 PARTIAL_INTERVAL_MS = 300
 FINAL_SILENCE_MS = 700
 WINDOW_MS = 3_000
-NON_SPEECH_CAPTIONS = frozenset({"blank audio", "silence", "howling wind", "wind", "wind blowing", "crowd cheer", "crowd cheering", "cheering", "applause", "engine revving", "engine reving", "keyboard clicking", "typing", "background noise", "music", "laughter"})
+MAX_UTTERANCE_MS = 45_000
+NON_SPEECH_CAPTIONS = frozenset({"blank audio", "silence", "howling wind", "wind", "wind blowing", "crowd cheer", "crowd cheering", "cheering", "applause", "engine revving", "engine reving", "keyboard clicking", "typing", "background noise", "music", "laughter", "non english speech", "speaking in foreign language", "foreign language"})
 
 
 def loopback_url(url: str) -> bool:
@@ -34,7 +36,7 @@ def loopback_url(url: str) -> bool:
 
 def human_speech_text(value: object) -> str:
     """Discard pure sound captions from Whisper while preserving genuine spoken text unchanged."""
-    text = " ".join(str(value).split())
+    text = " ".join(str(value or "").split())
     caption = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
     return "" if caption in NON_SPEECH_CAPTIONS else text
 
@@ -45,6 +47,7 @@ class Transcription:
 
     text: str
     latency_ms: float
+    language: str | None = None
 
 
 class Transcriber(Protocol):
@@ -77,11 +80,12 @@ def speech_present(pcm: bytes, threshold: float = 350) -> bool:
 class WhisperClient:
     """Send only a temporary in-memory rolling window to the already-loaded local Whisper server."""
 
-    def __init__(self, base_url: str = "http://127.0.0.1:8178", timeout_s: float = 8.0) -> None:
+    def __init__(self, base_url: str = "http://127.0.0.1:8178", timeout_s: float = 12.0, language: str = "auto") -> None:
         if not loopback_url(base_url):
             raise ValueError("Pulse Local only permits a loopback Whisper server")
-        self.base_url = base_url.rstrip("/")
-        self.timeout_s = timeout_s
+        if language not in {"auto", "en"}:
+            raise ValueError("Pulse Local only accepts automatic or English STT language selection")
+        self.base_url, self.timeout_s, self.language = base_url.rstrip("/"), timeout_s, language
 
     async def transcribe(self, wav: bytes) -> Transcription:
         """Make one local multipart request and parse only Whisper's text response."""
@@ -89,14 +93,15 @@ class WhisperClient:
 
         started = time.perf_counter()
         async with httpx.AsyncClient(timeout=self.timeout_s) as client:
-            response = await client.post(f"{self.base_url}/inference", files={"file": ("window.wav", wav, "audio/wav")}, data={"response_format": "json", "language": "en", "temperature": "0.0", "no_speech_thold": "0.6"})
+            response = await client.post(f"{self.base_url}/inference", files={"file": ("window.wav", wav, "audio/wav")}, data={"response_format": "verbose_json", "language": self.language, "no_language_probabilities": "true", "temperature": "0.0", "no_speech_thold": "0.6"})
         response.raise_for_status()
         try:
             body = response.json()
         except json.JSONDecodeError as exc:
             raise RuntimeError("local Whisper server returned invalid JSON") from exc
         text = human_speech_text(body.get("text", ""))
-        return Transcription(text=text, latency_ms=(time.perf_counter() - started) * 1000)
+        language = str(body.get("language", "")).strip().lower() or None
+        return Transcription(text=text, latency_ms=(time.perf_counter() - started) * 1000, language=language)
 
 
 class WhisperProcess:
@@ -148,44 +153,65 @@ async def wait_for_whisper(base_url: str, timeout_s: float = 45) -> None:
     raise TimeoutError("local Whisper server did not become ready")
 
 
+def supports_sentiment(language: str | None) -> bool:
+    """Allow calibrated sentiment only for the language represented by the current training data."""
+    return language in {None, "english", "en"}
+
+
+def unavailable_sentiment(language: str | None, model_id: str = "pulse-local") -> SentimentResult:
+    """Return an explicit empty result instead of applying an English sentiment model to another language."""
+    scores = tuple(SentimentScore(key=key, label=DISPLAY_NAMES[key], value=0.0, level="low") for key in DIMENSIONS)
+    return SentimentResult(scores=scores, action_pressure=0.0, dominant=None, abstained=True, latency_ms=0.0, model=model_id)
+
+
 class LiveSession:
     """Maintain one short in-memory microphone window and emit every partial sentiment update to the dashboard."""
 
-    def __init__(self, classifier: PulseClassifier, transcriber: Transcriber, partial_interval_ms: int = PARTIAL_INTERVAL_MS, final_silence_ms: int = FINAL_SILENCE_MS, window_ms: int = WINDOW_MS) -> None:
+    def __init__(self, classifier: PulseClassifier, transcriber: Transcriber, partial_interval_ms: int = PARTIAL_INTERVAL_MS, final_silence_ms: int = FINAL_SILENCE_MS, window_ms: int = WINDOW_MS, max_utterance_ms: int = MAX_UTTERANCE_MS) -> None:
         self.classifier, self.transcriber = classifier, transcriber
         self.partial_interval_ms, self.final_silence_ms = partial_interval_ms, final_silence_ms
         self.max_window_bytes = int(SAMPLE_RATE * window_ms / 1000) * 2
+        self.max_utterance_bytes = int(SAMPLE_RATE * max_utterance_ms / 1000) * 2
         self.window = bytearray()
+        self.utterance = bytearray()
         self.active = False
         self.sequence = 0
         self.last_tick_ms: float | None = None
         self.last_audio_ms: float | None = None
         self.last_speech_ms: float | None = None
         self.last_human_transcript: str | None = None
+        self.last_human_language: str | None = None
 
     def start(self) -> None:
         """Start a fresh capture, explicitly clearing any preceding in-memory audio and utterance state."""
         self.window.clear()
+        self.utterance.clear()
         self.active, self.sequence = True, 0
         self.last_tick_ms = self.last_audio_ms = self.last_speech_ms = None
         self.last_human_transcript = None
+        self.last_human_language = None
 
     def stop(self) -> None:
         """Immediately clear retained PCM and disable further transcription or inference."""
         self.window.clear()
+        self.utterance.clear()
         self.active = False
         self.last_audio_ms = self.last_speech_ms = None
         self.last_human_transcript = None
+        self.last_human_language = None
 
     def push_pcm(self, pcm: bytes, now_ms: float) -> None:
-        """Receive aligned browser PCM while retaining no more than the short rolling local window."""
+        """Receive aligned browser PCM while retaining a short live window and the active utterance in memory only."""
         if not self.active:
             return
         if len(pcm) % 2:
             raise ValueError("browser PCM is not aligned to 16-bit samples")
         self.window.extend(pcm)
+        self.utterance.extend(pcm)
         if len(self.window) > self.max_window_bytes:
             del self.window[:-self.max_window_bytes]
+        if len(self.utterance) > self.max_utterance_bytes:
+            del self.utterance[:-self.max_utterance_bytes]
         self.last_audio_ms = now_ms
         if speech_present(pcm):
             self.last_speech_ms = now_ms
@@ -201,25 +227,33 @@ class LiveSession:
         if not final and now_ms - self.last_tick_ms < self.partial_interval_ms:
             return None
         self.last_tick_ms = now_ms
-        transcript = await self.transcriber.transcribe(pcm_to_wav(bytes(self.window)))
+        audio = self.utterance if final else self.window
+        transcript = await self.transcriber.transcribe(pcm_to_wav(bytes(audio)))
         text = " ".join(transcript.text.split())
+        language = transcript.language
         if not text:
             if final and self.last_human_transcript:
                 text = self.last_human_transcript
+                language = self.last_human_language
             elif final:
                 self.window.clear()
+                self.utterance.clear()
                 self.last_speech_ms = self.last_audio_ms = None
                 return None
             else:
                 return None
-        sentiment = self.classifier.classify(text)
+        sentiment_supported = supports_sentiment(language)
+        sentiment = self.classifier.classify(text) if sentiment_supported else unavailable_sentiment(language, getattr(self.classifier, "model_id", "pulse-local"))
         self.sequence += 1
         completed = time.perf_counter() * 1000
-        event = {"type": "final" if final else "partial", "sequence": self.sequence, "transcript": text, "sentiment": sentiment.to_dict(), "timings_ms": {"stt": round(transcript.latency_ms, 3), "classifier": sentiment.latency_ms, "audio_to_ui": round(completed - (self.last_audio_ms or completed), 3)}}
+        event = {"type": "final" if final else "partial", "sequence": self.sequence, "transcript": text, "language": language, "sentiment_supported": sentiment_supported, "sentiment": sentiment.to_dict(), "timings_ms": {"stt": round(transcript.latency_ms, 3), "classifier": sentiment.latency_ms, "audio_to_ui": round(completed - (self.last_audio_ms or completed), 3)}}
         if final:
             self.window.clear()
+            self.utterance.clear()
             self.last_speech_ms = self.last_audio_ms = None
             self.last_human_transcript = None
+            self.last_human_language = None
         else:
             self.last_human_transcript = text
+            self.last_human_language = language
         return event

@@ -10,7 +10,7 @@
     <main class="app-shell">
       <header class="topbar">
         <div class="brand"><span class="brand-mark"></span><span>Pulse Local</span><span class="local-badge">On this Mac</span></div>
-        <div class="topbar-right"><span id="connection" class="connection">Local engine ready</span><button id="start" class="record">Start listening</button><button id="stop" class="stop" disabled>Stop</button></div>
+        <div class="topbar-right"><span id="connection" class="connection">Local engine ready</span><button id="export" class="utility" disabled>Export</button><button id="reset" class="utility">Reset</button><button id="start" class="record">Start listening</button><button id="stop" class="stop" disabled>Stop</button></div>
       </header>
 
       <section class="stage">
@@ -44,9 +44,9 @@
         </aside>
       </section>
 
-      <section class="wave-section" aria-label="Live microphone activity"><canvas id="waveform"></canvas><div class="wave-status"><span class="record-dot"></span><span id="wave-copy">Microphone inactive</span><span id="stt">STT —</span><span id="classifier">Text model —</span></div></section>
+      <section class="wave-section" aria-label="Live microphone activity"><canvas id="waveform"></canvas><div class="wave-status"><span class="record-dot"></span><span id="wave-copy">Microphone inactive</span><span id="language" class="telemetry telemetry-first">Language —</span><span id="stt" class="telemetry">STT —</span><span id="classifier" class="telemetry">Text model —</span></div></section>
 
-      <footer>English text-sentiment demo · GoEmotions attribution in local artifacts · No audio is stored or sent off-device.</footer>
+      <footer>Multilingual local transcription · English text-sentiment labels · GoEmotions attribution in local artifacts · No audio is stored or sent off-device.</footer>
     </main>
     <script src="/static/app.js"></script>
   </body>

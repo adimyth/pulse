@@ -12,7 +12,7 @@ import pathlib
 import sys
 
 model = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")).get("selected_model")
-if model not in {"small.en", "base.en"}:
+if model not in {"small", "base", "small.en", "base.en"}:
     raise SystemExit("stt selection is invalid")
 print(model)
 PY

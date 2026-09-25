@@ -5,12 +5,14 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${repo_root}/var/whisper.cpp"
 repository_url="https://github.com/ggml-org/whisper.cpp.git"
 revision="${WHISPER_CPP_REVISION:-d09f61a708f3487afa956ff578e60eae5e7a233c}"
-model="${WHISPER_MODEL:-small.en}"
+model="${WHISPER_MODEL:-small}"
 
 case "${model}" in
-  small.en) expected_model_sha1="db8a495a91d927739e50b3fc1cc4c6b8f6c2d022" ;;
-  base.en) expected_model_sha1="137c40403d78fd54d454da0f9bd998f78703390c" ;;
-  *) echo "Pulse Local supports only small.en and base.en" >&2; exit 2 ;;
+  small) expected_model_sha256="1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b" ;;
+  base) expected_model_sha256="60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe" ;;
+  small.en) expected_model_sha256="c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d" ;;
+  base.en) expected_model_sha256="3e2eabc347eb339c98b417d1eae3c2fc701d0a9ee23c67ca15db49cfa2c16c86" ;;
+  *) echo "Pulse Local supports small, base, small.en, and base.en" >&2; exit 2 ;;
 esac
 
 cmake_bin="${CMAKE_BIN:-$(command -v cmake)}"
@@ -25,14 +27,14 @@ arch -arm64 "${cmake_bin}" -S "${runtime_root}" -B "${runtime_root}/build-arm64"
 arch -arm64 "${cmake_bin}" --build "${runtime_root}/build-arm64" --target whisper-server --config Release -j
 
 model_path="${runtime_root}/models/ggml-${model}.bin"
-if [[ -f "${model_path}" ]] && [[ "$(shasum -a 1 "${model_path}" | awk '{print $1}')" != "${expected_model_sha1}" ]]; then
-  mv "${model_path}" "${model_path}.invalid-$(shasum -a 1 "${model_path}" | awk '{print $1}')"
+if [[ -f "${model_path}" ]] && [[ "$(shasum -a 256 "${model_path}" | awk '{print $1}')" != "${expected_model_sha256}" ]]; then
+  mv "${model_path}" "${model_path}.invalid-$(shasum -a 256 "${model_path}" | awk '{print $1}')"
 fi
 "${runtime_root}/models/download-ggml-model.sh" "${model}" "${runtime_root}/models"
-actual_model_sha1="$(shasum -a 1 "${model_path}" | awk '{print $1}')"
-[[ "${actual_model_sha1}" == "${expected_model_sha1}" ]] || { echo "model checksum mismatch" >&2; exit 1; }
+actual_model_sha256="$(shasum -a 256 "${model_path}" | awk '{print $1}')"
+[[ "${actual_model_sha256}" == "${expected_model_sha256}" ]] || { echo "model checksum mismatch" >&2; exit 1; }
 
-python3 - "${runtime_root}" "${repository_url}" "${revision}" "${model}" "${expected_model_sha1}" <<'PY'
+python3 - "${runtime_root}" "${repository_url}" "${revision}" "${model}" "${expected_model_sha256}" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -46,8 +48,7 @@ manifest = {
     "requested_revision": sys.argv[3],
     "resolved_revision": subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip(),
     "model": sys.argv[4],
-    "model_sha1": sys.argv[5],
-    "model_sha256": hashlib.sha256(model.read_bytes()).hexdigest(),
+    "model_sha256": sys.argv[5],
 }
 (root / "bootstrap-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 print(json.dumps(manifest, indent=2))

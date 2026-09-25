@@ -1,19 +1,24 @@
-const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, liveText: "", raf: null, accent: "#7aa6ff", signalStrength: .12 };
+const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, liveText: "", history: [], raf: null, accent: "#7aa6ff", signalStrength: .12 };
 const transcript = document.querySelector("#transcript");
 const transcriptHistory = document.querySelector("#transcript-history");
 const transcriptScroll = document.querySelector("#transcript-scroll");
 const meters = [...document.querySelectorAll(".meter")];
 const startButton = document.querySelector("#start");
 const stopButton = document.querySelector("#stop");
+const resetButton = document.querySelector("#reset");
+const exportButton = document.querySelector("#export");
 const connection = document.querySelector("#connection");
 const canvas = document.querySelector("#waveform");
 const drawing = canvas.getContext("2d");
 const signalCanvas = document.querySelector("#signal-wave");
 const signalDrawing = signalCanvas.getContext("2d");
 const tones = { frustration: "#ef5c5f", positive: "#e5c23e", surprise: "#bc8def", uncertainty: "#7aa6ff", low_mood: "#758290", neutral: "#b5bbc5" };
+const nonSpeechCaptions = new Set(["blank audio", "silence", "howling wind", "wind", "wind blowing", "crowd cheer", "crowd cheering", "cheering", "applause", "engine revving", "engine reving", "keyboard clicking", "typing", "background noise", "music", "laughter", "non english speech", "speaking in foreign language", "foreign language"]);
 
 function setText(id, value) { document.querySelector(id).textContent = value; }
 function displayMs(value) { return `${Math.round(value)} ms`; }
+function displayName(value) { return value ? value.replaceAll("_", " ").replace(/\b\w/g, character => character.toUpperCase()) : "Listening"; }
+function isHumanTranscript(text) { return Boolean(text?.trim()) && !nonSpeechCaptions.has(text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()); }
 
 function renderTranscript(text, accent) {
   if (text !== state.liveText) transcript.textContent = text;
@@ -21,15 +26,19 @@ function renderTranscript(text, accent) {
   state.liveText = text;
 }
 
-function archiveTranscript(text, accent) {
+function archiveTranscript(event, accent) {
   const entry = document.createElement("li");
   const label = document.createElement("span");
   const content = document.createElement("p");
-  label.textContent = "Final";
-  content.textContent = text;
+  const sentimentLabel = event.sentiment_supported ? event.sentiment.dominant ? displayName(event.sentiment.dominant) : "Insufficient context" : "Sentiment unavailable";
+  const languageLabel = event.language ? displayName(event.language) : "Language pending";
+  label.textContent = `Final · ${languageLabel} · ${sentimentLabel}`;
+  content.textContent = event.transcript;
   content.style.color = accent;
   entry.append(label, content);
   transcriptHistory.append(entry);
+  state.history.push({ text: event.transcript, color: accent, language: languageLabel, sentiment: sentimentLabel });
+  exportButton.disabled = false;
   transcript.textContent = "Listening for the next thought…";
   transcript.style.color = "#707070";
   state.liveText = "";
@@ -54,11 +63,19 @@ function renderSentiment(result) {
   setText("#context-state", result.abstained ? "Listening for enough context…" : "Text signals update independently as the transcript changes.");
 }
 
+function renderLanguage(event) {
+  const language = event.language ? displayName(event.language) : "Detecting language";
+  setText("#language", `Language ${language}`);
+  if (!event.sentiment_supported) setText("#context-state", `${language} transcript detected. Sentiment labels are currently trained only for English text.`);
+}
+
 function renderEvent(event) {
-  const accent = tones[event.sentiment.dominant] || "#7aa6ff";
-  if (event.type === "final") archiveTranscript(event.transcript, accent);
+  if (!isHumanTranscript(event.transcript)) return;
+  const accent = event.sentiment_supported ? tones[event.sentiment.dominant] || "#7aa6ff" : "#9baecf";
+  if (event.type === "final") archiveTranscript(event, accent);
   else renderTranscript(event.transcript, accent);
   renderSentiment(event.sentiment);
+  renderLanguage(event);
   setText("#utterance-state", event.type === "final" ? "Final" : "Live");
   setText("#event-kind", event.type === "final" ? "Utterance finalized" : "Refreshing every 300 ms");
   setText("#latency", `Audio → UI ${displayMs(event.timings_ms.audio_to_ui)}`);
@@ -175,6 +192,46 @@ function closeMicrophone() {
   setText("#wave-copy", "Microphone inactive");
 }
 
+function resetDisplay() {
+  transcriptHistory.replaceChildren();
+  state.history = [];
+  state.liveText = "";
+  state.accent = "#7aa6ff";
+  state.signalStrength = .12;
+  transcript.textContent = "Press start and speak naturally.";
+  transcript.style.color = "#707070";
+  meters.forEach(meter => { meter.querySelector("strong").textContent = "—"; meter.querySelector("b").style.width = "0%"; });
+  setText("#dominant", "Listening");
+  setText("#pressure", "Waiting for speech");
+  setText("#pressure-detail", "Shown separately from sentiment when the transcript contains urgency wording.");
+  document.querySelector("#pressure-bar").style.width = "0%";
+  setText("#utterance-state", "Idle");
+  setText("#context-state", "Audio and inference stay on this Mac.");
+  setText("#event-kind", "Awaiting speech");
+  setText("#latency", "—");
+  setText("#language", "Language —");
+  setText("#stt", "STT —");
+  setText("#classifier", "Text model —");
+  exportButton.disabled = true;
+}
+
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]);
+}
+
+function exportTranscript() {
+  if (!state.history.length) return;
+  const rows = state.history.map(entry => `<article><p class="meta">Final · ${escapeHtml(entry.language)} · ${escapeHtml(entry.sentiment)}</p><p class="utterance" style="color:${entry.color}">${escapeHtml(entry.text)}</p></article>`).join("\n");
+  const documentText = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Pulse Local transcript</title><style>body{margin:0;padding:44px;max-width:860px;background:#111;color:#f4f3ef;font-family:Inter,system-ui,sans-serif}h1{font-size:1.4rem;margin:0 0 8px}.note{color:#a5a5a5;margin:0 0 30px}article{padding:18px 0;border-top:1px solid #333}.meta{margin:0 0 7px;color:#929292;font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.utterance{margin:0;font-size:1.2rem;line-height:1.5}</style></head><body><h1>Pulse Local · Session transcript</h1><p class="note">Local export · colors and labels show the sentiment result for each finalized English utterance. Non-English utterances are marked as sentiment unavailable.</p>${rows}</body></html>`;
+  const download = document.createElement("a");
+  download.href = URL.createObjectURL(new Blob([documentText], { type: "text/html" }));
+  download.download = `pulse-transcript-${new Date().toISOString().replaceAll(":", "-")}.html`;
+  document.body.append(download);
+  download.click();
+  download.remove();
+  setTimeout(() => URL.revokeObjectURL(download.href), 0);
+}
+
 async function start() {
   startButton.disabled = true;
   setText("#connection", "Opening local session…");
@@ -205,8 +262,15 @@ function stop() {
   startButton.disabled = false;
 }
 
+function resetSession() {
+  stop();
+  resetDisplay();
+}
+
 window.addEventListener("resize", resizeCanvas);
 startButton.addEventListener("click", start);
 stopButton.addEventListener("click", stop);
+resetButton.addEventListener("click", resetSession);
+exportButton.addEventListener("click", exportTranscript);
 resizeCanvas();
 drawWave();
