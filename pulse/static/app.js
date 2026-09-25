@@ -1,4 +1,4 @@
-const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, liveText: "", history: [], raf: null, accent: "#7aa6ff", signalStrength: .12 };
+const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, liveText: "", history: [], raf: null, accent: "#7aa6ff", signalStrength: .12, currentWave: [], sessionWave: [], waveFramePeak: 0, waveFrameSamples: 0, currentWaveOpen: false };
 const transcript = document.querySelector("#transcript");
 const transcriptHistory = document.querySelector("#transcript-history");
 const transcriptScroll = document.querySelector("#transcript-scroll");
@@ -14,6 +14,10 @@ const signalCanvas = document.querySelector("#signal-wave");
 const signalDrawing = signalCanvas.getContext("2d");
 const tones = { frustration: "#ef5c5f", positive: "#e5c23e", surprise: "#bc8def", uncertainty: "#7aa6ff", low_mood: "#758290", neutral: "#b5bbc5" };
 const nonSpeechCaptions = new Set(["blank audio", "silence", "howling wind", "wind", "wind blowing", "crowd cheer", "crowd cheering", "cheering", "applause", "engine revving", "engine reving", "keyboard clicking", "typing", "background noise", "music", "laughter", "non english speech", "speaking in foreign language", "foreign language"]);
+const WAVE_SAMPLE_WINDOW = .025;
+const MAX_SESSION_WAVE_SAMPLES = 2400;
+const MAX_CURRENT_WAVE_SAMPLES = 420;
+const SPEECH_WAVE_THRESHOLD = .012;
 
 function setText(id, value) { document.querySelector(id).textContent = value; }
 function displayMs(value) { return `${Math.round(value)} ms`; }
@@ -72,7 +76,10 @@ function renderLanguage(event) {
 function renderEvent(event) {
   if (!isHumanTranscript(event.transcript)) return;
   const accent = event.sentiment_supported ? tones[event.sentiment.dominant] || "#7aa6ff" : "#9baecf";
-  if (event.type === "final") archiveTranscript(event, accent);
+  if (event.type === "final") {
+    archiveTranscript(event, accent);
+    finishCurrentWave();
+  }
   else renderTranscript(event.transcript, accent);
   renderSentiment(event.sentiment);
   renderLanguage(event);
@@ -95,53 +102,79 @@ function resizeCanvas() {
   resizeOneCanvas(signalCanvas, signalDrawing);
 }
 
-function drawSignalWave(time) {
-  const width = signalCanvas.clientWidth;
-  const height = signalCanvas.clientHeight;
-  signalDrawing.clearRect(0, 0, width, height);
-  const bars = 42;
-  const centre = height / 2;
-  for (let index = 0; index < bars; index += 1) {
-    const phase = time / 650 + index * .52;
-    const envelope = Math.sin(index / (bars - 1) * Math.PI);
-    const movement = .42 + .58 * Math.abs(Math.sin(phase));
-    const barHeight = Math.max(4, envelope * movement * state.signalStrength * height * .92);
-    const x = index * width / bars + 1;
-    signalDrawing.fillStyle = state.accent;
-    signalDrawing.globalAlpha = .22 + envelope * .75;
-    signalDrawing.beginPath();
-    signalDrawing.roundRect(x, centre - barHeight / 2, Math.max(3, width / bars - 4), barHeight, 4);
-    signalDrawing.fill();
-  }
-  signalDrawing.globalAlpha = 1;
+function compactWave(wave, limit) {
+  if (wave.length <= limit) return;
+  const compacted = [];
+  for (let index = 0; index < wave.length; index += 2) compacted.push(Math.max(wave[index], wave[index + 1] || 0));
+  wave.splice(0, wave.length, ...compacted);
 }
 
-function drawWave(time) {
+function appendWaveSample(amplitude) {
+  state.sessionWave.push(amplitude);
+  compactWave(state.sessionWave, MAX_SESSION_WAVE_SAMPLES);
+  if (!state.currentWaveOpen && amplitude >= SPEECH_WAVE_THRESHOLD) {
+    state.currentWave = [];
+    state.currentWaveOpen = true;
+    setText("#current-wave-state", "Speaking");
+  }
+  if (state.currentWaveOpen) {
+    state.currentWave.push(amplitude);
+    compactWave(state.currentWave, MAX_CURRENT_WAVE_SAMPLES);
+  }
+}
+
+function recordWaveform(input) {
+  if (!state.sourceRate) return;
+  let sum = 0;
+  for (const sample of input) sum += sample * sample;
+  state.waveFramePeak = Math.max(state.waveFramePeak, Math.sqrt(sum / input.length));
+  state.waveFrameSamples += input.length;
+  if (state.waveFrameSamples < state.sourceRate * WAVE_SAMPLE_WINDOW) return;
+  appendWaveSample(state.waveFramePeak);
+  state.waveFramePeak = 0;
+  state.waveFrameSamples = 0;
+}
+
+function finishCurrentWave() {
+  if (!state.currentWaveOpen && !state.currentWave.length) return;
+  state.currentWaveOpen = false;
+  state.currentWave = [];
+  setText("#current-wave-state", "Awaiting speech");
+}
+
+function drawEnvelope(context, target, values, color, active) {
+  const width = target.clientWidth;
+  const height = target.clientHeight;
+  context.clearRect(0, 0, width, height);
+  const centre = height / 2;
+  context.fillStyle = "#2e2e2e";
+  context.fillRect(0, centre, width, 1);
+  if (!values.length) return;
+  const bars = Math.max(1, Math.min(Math.floor(width / 5), values.length));
+  for (let index = 0; index < bars; index += 1) {
+    const start = Math.floor(index * values.length / bars);
+    const end = Math.max(start + 1, Math.floor((index + 1) * values.length / bars));
+    let amplitude = 0;
+    for (let sample = start; sample < end; sample += 1) amplitude = Math.max(amplitude, values[sample]);
+    const barHeight = Math.max(2, Math.min(height * .92, amplitude * height * 8.5));
+    const x = index * width / bars + 1;
+    context.fillStyle = color;
+    context.globalAlpha = active ? Math.max(.4, Math.min(.96, amplitude * 7)) : Math.max(.2, Math.min(.58, amplitude * 4));
+    context.beginPath();
+    context.roundRect(x, centre - barHeight / 2, Math.max(2, width / bars - 3), barHeight, 4);
+    context.fill();
+  }
+  context.globalAlpha = 1;
+}
+
+function drawWave() {
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
   drawing.clearRect(0, 0, width, height);
   drawing.fillStyle = "#141414";
   drawing.fillRect(0, 0, width, height);
-  const bars = 84;
-  const values = new Uint8Array(state.analyser?.fftSize || 256);
-  if (state.analyser) state.analyser.getByteTimeDomainData(values);
-  const centre = height * .43;
-  drawing.fillStyle = "#343434";
-  drawing.fillRect(0, centre, width, 1);
-  for (let index = 0; index < bars; index += 1) {
-    const sourceIndex = Math.floor(index / bars * values.length);
-    const amplitude = state.analyser ? Math.abs(values[sourceIndex] - 128) / 128 : 0.035;
-    const barHeight = Math.max(4, amplitude * height * .92);
-    const x = (index + .5) * width / bars;
-    const active = state.stream && index > 6 && index < bars - 7;
-    drawing.fillStyle = active ? state.accent : "#444";
-    drawing.globalAlpha = active ? Math.max(.38, amplitude * 1.5) : .45;
-    drawing.beginPath();
-    drawing.roundRect(x, centre - barHeight / 2, Math.max(3, width / bars - 5), barHeight, 5);
-    drawing.fill();
-  }
-  drawing.globalAlpha = 1;
-  drawSignalWave(time);
+  drawEnvelope(drawing, canvas, state.sessionWave, "#98a0ac", Boolean(state.stream));
+  drawEnvelope(signalDrawing, signalCanvas, state.currentWave, state.accent, state.currentWaveOpen);
   state.raf = requestAnimationFrame(drawWave);
 }
 
@@ -172,13 +205,13 @@ async function startMicrophone() {
   state.capture = new AudioWorkletNode(state.context, "pulse-capture");
   state.mute = state.context.createGain();
   state.mute.gain.value = 0;
-  state.capture.port.onmessage = ({ data }) => downsample(data);
+  state.capture.port.onmessage = ({ data }) => { recordWaveform(data); downsample(data); };
   state.source.connect(state.analyser);
   state.source.connect(state.capture);
   state.capture.connect(state.mute);
   state.mute.connect(state.context.destination);
   document.querySelector(".record-dot").classList.add("active");
-  setText("#wave-copy", "Listening locally · 16 kHz PCM");
+  setText("#wave-copy", "Session waveform · listening locally");
 }
 
 function closeMicrophone() {
@@ -189,7 +222,8 @@ function closeMicrophone() {
   state.context?.close();
   Object.assign(state, { stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0 });
   document.querySelector(".record-dot").classList.remove("active");
-  setText("#wave-copy", "Microphone inactive");
+  if (state.currentWaveOpen) finishCurrentWave();
+  setText("#wave-copy", "Session waveform · microphone inactive");
 }
 
 function resetDisplay() {
@@ -198,6 +232,11 @@ function resetDisplay() {
   state.liveText = "";
   state.accent = "#7aa6ff";
   state.signalStrength = .12;
+  state.currentWave = [];
+  state.sessionWave = [];
+  state.waveFramePeak = 0;
+  state.waveFrameSamples = 0;
+  state.currentWaveOpen = false;
   transcript.textContent = "Press start and speak naturally.";
   transcript.style.color = "#707070";
   meters.forEach(meter => { meter.querySelector("strong").textContent = "—"; meter.querySelector("b").style.width = "0%"; });
@@ -212,6 +251,7 @@ function resetDisplay() {
   setText("#language", "Language —");
   setText("#stt", "STT —");
   setText("#classifier", "Text model —");
+  setText("#current-wave-state", "Awaiting speech");
   exportButton.disabled = true;
 }
 

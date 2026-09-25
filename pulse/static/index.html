@@ -25,7 +25,8 @@
         </article>
 
         <aside class="signal-area">
-          <canvas id="signal-wave" class="signal-wave" aria-label="Live sentiment waveform"></canvas>
+          <div class="wave-caption"><span>Current utterance</span><span id="current-wave-state">Awaiting speech</span></div>
+          <canvas id="signal-wave" class="signal-wave" aria-label="Current utterance waveform"></canvas>
           <div class="signal-heading"><span>Text sentiment</span><strong id="dominant">Listening</strong></div>
           <p class="signal-note">Independent text signals, not a diagnosis of emotion.</p>
           <ol id="meters" class="meters">
@@ -44,7 +45,7 @@
         </aside>
       </section>
 
-      <section class="wave-section" aria-label="Live microphone activity"><canvas id="waveform"></canvas><div class="wave-status"><span class="record-dot"></span><span id="wave-copy">Microphone inactive</span><span id="language" class="telemetry telemetry-first">Language —</span><span id="stt" class="telemetry">STT —</span><span id="classifier" class="telemetry">Text model —</span></div></section>
+      <section class="wave-section" aria-label="Session speech waveform"><canvas id="waveform"></canvas><div class="wave-status"><span class="record-dot"></span><span id="wave-copy">Session waveform · microphone inactive</span><span id="language" class="telemetry telemetry-first">Language —</span><span id="stt" class="telemetry">STT —</span><span id="classifier" class="telemetry">Text model —</span></div></section>
 
       <footer>Multilingual local transcription · English text-sentiment labels · GoEmotions attribution in local artifacts · No audio is stored or sent off-device.</footer>
     </main>
