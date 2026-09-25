@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from pulse.audio import LiveSession, Transcription, WhisperClient, human_speech_text, pcm_to_wav, sentence_segments, speech_present
+from pulse.audio import LiveSession, Transcription, WhisperClient, human_speech_text, merge_live_transcript, pcm_to_wav, sentence_segments, speech_present
 from pulse.labels import DIMENSIONS, DISPLAY_NAMES
 from pulse.model import SentimentResult, SentimentScore
 from pulse.server import create_app
@@ -32,6 +32,8 @@ def test_pcm_stays_in_memory_and_loopback_client_rejects_external_hosts():
     assert speech_present(pcm(2000)) is True
     with pytest.raises(ValueError):
         WhisperClient("https://example.com")
+    with pytest.raises(ValueError):
+        WhisperClient(language="auto")
 
 
 def test_pure_sound_captions_do_not_become_transcript_entries():
@@ -47,6 +49,12 @@ def test_pure_sound_captions_do_not_become_transcript_entries():
 
 def test_sentence_segments_preserve_complete_sentences_for_independent_coloring():
     assert sentence_segments("Hello. This charge is wrong! Please help") == ("Hello.", "This charge is wrong!", "Please help")
+
+
+def test_live_transcript_only_extends_when_rolling_windows_overlap_stably():
+    assert merge_live_transcript("Hello, thank you", "thank you for helping") == "Hello, thank you for helping"
+    assert merge_live_transcript("Hello, thank you", "Hello thank you for helping") == "Hello thank you for helping"
+    assert merge_live_transcript("Hello, thank you", "unrelated revision") == "Hello, thank you"
 
 
 def test_live_session_emits_every_partial_then_one_final_and_clears_pcm():

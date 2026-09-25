@@ -84,7 +84,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Pulse Local speech-to-sentiment dashboard.")
     parser.add_argument("--artifacts", type=Path, default=Path("var/pulse-model"))
     parser.add_argument("--whisper-binary", type=Path, default=Path("var/whisper.cpp/build-arm64/bin/whisper-server"))
-    parser.add_argument("--whisper-model", type=Path, default=Path("var/whisper.cpp/models/ggml-small.bin"))
+    parser.add_argument("--whisper-model", type=Path, default=Path("var/whisper.cpp/models/ggml-small.en.bin"))
     parser.add_argument("--whisper-port", type=int, default=8178)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8050)
@@ -105,7 +105,7 @@ def main() -> None:
     whisper.start()
     try:
         asyncio.run(wait_for_whisper(f"http://127.0.0.1:{args.whisper_port}"))
-        uvicorn.run(create_app(classifier, WhisperClient(f"http://127.0.0.1:{args.whisper_port}", language="auto")), host=args.host, port=args.port, workers=1)
+        uvicorn.run(create_app(classifier, WhisperClient(f"http://127.0.0.1:{args.whisper_port}", language="en")), host=args.host, port=args.port, workers=1)
     finally:
         whisper.stop()
 

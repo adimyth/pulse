@@ -17,12 +17,12 @@ run_gate() {
   uv run python "${repo_root}/scripts/bench_fixture.py" "${fixture}" --whisper-model "${repo_root}/var/whisper.cpp/models/ggml-${model}.bin" "$@"
 }
 
-if run_gate "small" "$@"; then
-  selected="small"
+if run_gate "small.en" "$@"; then
+  selected="small.en"
 else
-  echo "small did not pass the local gate; trying base" >&2
-  run_gate "base" "$@"
-  selected="base"
+  echo "small.en did not pass the local gate; trying base.en" >&2
+  run_gate "base.en" "$@"
+  selected="base.en"
 fi
 
 python3 - "${repo_root}/var/pulse-model" "${selected}" <<'PY'

@@ -39,7 +39,7 @@ async def replay(args: argparse.Namespace) -> dict:
     whisper = WhisperProcess(args.whisper_binary, args.whisper_model, port=args.whisper_port)
     whisper.start()
     try:
-        client = WhisperClient(f"http://127.0.0.1:{args.whisper_port}", language="auto")
+        client = WhisperClient(f"http://127.0.0.1:{args.whisper_port}", language="en")
         await wait_for_whisper(client.base_url)
         pcm = pcm_from_video(args.source)
         window_bytes, step_bytes = SAMPLE_RATE * 3 * 2, SAMPLE_RATE * 300 // 1000 * 2
@@ -66,7 +66,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("source", type=Path)
     parser.add_argument("--artifacts", type=Path, default=Path("var/pulse-model"))
     parser.add_argument("--whisper-binary", type=Path, default=Path("var/whisper.cpp/build-arm64/bin/whisper-server"))
-    parser.add_argument("--whisper-model", type=Path, default=Path("var/whisper.cpp/models/ggml-small.bin"))
+    parser.add_argument("--whisper-model", type=Path, default=Path("var/whisper.cpp/models/ggml-small.en.bin"))
     parser.add_argument("--whisper-port", type=int, default=8178)
     parser.add_argument("--device")
     parser.add_argument("--output", type=Path, default=Path("var/pulse-model/fixture-report.json"))

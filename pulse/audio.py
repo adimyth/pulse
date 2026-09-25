@@ -42,6 +42,22 @@ def human_speech_text(value: object) -> str:
     return "" if caption in NON_SPEECH_CAPTIONS else text
 
 
+def merge_live_transcript(previous: str, candidate: str) -> str:
+    old_words, new_words = previous.split(), candidate.split()
+    if not old_words:
+        return candidate
+    old_keys = [re.sub(r"[^a-z0-9]+", "", word.lower()) for word in old_words]
+    new_keys = [re.sub(r"[^a-z0-9]+", "", word.lower()) for word in new_words]
+    if new_keys[:len(old_keys)] == old_keys:
+        return candidate
+    if old_keys[:len(new_keys)] == new_keys:
+        return previous
+    for overlap in range(min(len(old_words), len(new_words)), 1, -1):
+        if old_keys[-overlap:] == new_keys[:overlap]:
+            return " ".join([*old_words, *new_words[overlap:]])
+    return previous
+
+
 def sentence_segments(value: str) -> tuple[str, ...]:
     text = " ".join(value.split())
     if not text:
@@ -88,11 +104,11 @@ def speech_present(pcm: bytes, threshold: float = 350) -> bool:
 class WhisperClient:
     """Send only a temporary in-memory rolling window to the already-loaded local Whisper server."""
 
-    def __init__(self, base_url: str = "http://127.0.0.1:8178", timeout_s: float = 12.0, language: str = "auto") -> None:
+    def __init__(self, base_url: str = "http://127.0.0.1:8178", timeout_s: float = 12.0, language: str = "en") -> None:
         if not loopback_url(base_url):
             raise ValueError("Pulse Local only permits a loopback Whisper server")
-        if language not in {"auto", "en"}:
-            raise ValueError("Pulse Local only accepts automatic or English STT language selection")
+        if language != "en":
+            raise ValueError("Pulse Local is configured for English-only STT")
         self.base_url, self.timeout_s, self.language = base_url.rstrip("/"), timeout_s, language
 
     async def transcribe(self, wav: bytes) -> Transcription:
@@ -237,9 +253,9 @@ class LiveSession:
         self.last_tick_ms = now_ms
         audio = self.utterance if final else self.window
         transcript = await self.transcriber.transcribe(pcm_to_wav(bytes(audio)))
-        text = " ".join(transcript.text.split())
+        candidate = " ".join(transcript.text.split())
         language = transcript.language
-        if not text:
+        if not candidate:
             if final and self.last_human_transcript:
                 text = self.last_human_transcript
                 language = self.last_human_language
@@ -250,6 +266,10 @@ class LiveSession:
                 return None
             else:
                 return None
+        elif final:
+            text = candidate
+        else:
+            text = merge_live_transcript(self.last_human_transcript or "", candidate)
         sentiment_supported = supports_sentiment(language)
         if final:
             sentences = []

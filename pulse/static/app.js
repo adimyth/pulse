@@ -77,11 +77,6 @@ function renderSentiment(result) {
   setText("#pressure-detail", pressure ? "Urgency wording is present in the current transcript." : "No urgency wording is present in the current transcript.");
 }
 
-function renderLanguage(event) {
-  const language = event.language ? displayName(event.language) : "Detecting language";
-  setText("#language", `Language ${language}`);
-}
-
 function renderEvent(event) {
   if (!isHumanTranscript(event.transcript)) return;
   const accent = event.sentiment_supported ? tones[event.sentiment.dominant] || "#7aa6ff" : "#9baecf";
@@ -91,7 +86,6 @@ function renderEvent(event) {
   }
   else renderTranscript(event.transcript, accent);
   renderSentiment(event.sentiment);
-  renderLanguage(event);
   setText("#stt", `STT ${displayMs(event.timings_ms.stt)}`);
   setText("#classifier", `Text model ${displayMs(event.timings_ms.classifier)}`);
 }
@@ -250,7 +244,6 @@ function resetDisplay() {
   setText("#pressure", "Waiting for speech");
   setText("#pressure-detail", "Shown separately from sentiment when the transcript contains urgency wording.");
   document.querySelector("#pressure-bar").style.width = "0%";
-  setText("#language", "Language —");
   setText("#stt", "STT —");
   setText("#classifier", "Text model —");
   setText("#current-wave-state", "Awaiting speech");

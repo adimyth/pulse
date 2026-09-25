@@ -5,14 +5,12 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${repo_root}/var/whisper.cpp"
 repository_url="https://github.com/ggml-org/whisper.cpp.git"
 revision="${WHISPER_CPP_REVISION:-d09f61a708f3487afa956ff578e60eae5e7a233c}"
-model="${WHISPER_MODEL:-small}"
+model="${WHISPER_MODEL:-small.en}"
 
 case "${model}" in
-  small) expected_model_sha256="1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b" ;;
-  base) expected_model_sha256="60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe" ;;
   small.en) expected_model_sha256="c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d" ;;
   base.en) expected_model_sha256="3e2eabc347eb339c98b417d1eae3c2fc701d0a9ee23c67ca15db49cfa2c16c86" ;;
-  *) echo "Pulse Local supports small, base, small.en, and base.en" >&2; exit 2 ;;
+  *) echo "Pulse Local supports small.en and base.en" >&2; exit 2 ;;
 esac
 
 cmake_bin="${CMAKE_BIN:-$(command -v cmake)}"
