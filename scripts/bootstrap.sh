@@ -11,7 +11,7 @@ case "${model}" in
   medium.en) expected_model_sha256="cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356" ;;
   small.en) expected_model_sha256="c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d" ;;
   base.en) expected_model_sha256="3e2eabc347eb339c98b417d1eae3c2fc701d0a9ee23c67ca15db49cfa2c16c86" ;;
-  *) echo "Pulse Local supports medium.en, small.en, and base.en" >&2; exit 2 ;;
+  *) echo "Pulse supports medium.en, small.en, and base.en" >&2; exit 2 ;;
 esac
 
 ensure_model() {

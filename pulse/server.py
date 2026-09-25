@@ -1,4 +1,4 @@
-"""The local-only FastAPI dashboard server for Pulse Local."""
+"""The local-only FastAPI dashboard server for Pulse."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 def create_app(classifier, transcriber, final_transcriber=None) -> FastAPI:
     """Create a testable loopback dashboard application without a cloud route or a microphone requirement."""
-    app = FastAPI(title="Pulse Local", version="0.1")
+    app = FastAPI(title="Pulse", version="0.1")
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/")
@@ -113,7 +113,7 @@ def create_app(classifier, transcriber, final_transcriber=None) -> FastAPI:
 
 def parse_args() -> argparse.Namespace:
     """Read loopback-only runtime paths with a non-conflicting local Whisper port."""
-    parser = argparse.ArgumentParser(description="Run the Pulse Local speech-to-sentiment dashboard.")
+    parser = argparse.ArgumentParser(description="Run the Pulse speech-to-sentiment dashboard.")
     parser.add_argument("--artifacts", type=Path, default=Path("var/pulse-model"))
     parser.add_argument("--whisper-binary", type=Path, default=Path("var/whisper.cpp/build-arm64/bin/whisper-server"))
     parser.add_argument("--whisper-model", type=Path, default=Path("var/whisper.cpp/models/ggml-medium.en.bin"))
@@ -132,7 +132,7 @@ def main() -> None:
 
     args = parse_args()
     if args.host not in {"127.0.0.1", "localhost"}:
-        raise SystemExit("Pulse Local refuses a non-loopback dashboard host")
+        raise SystemExit("Pulse refuses a non-loopback dashboard host")
     classifier = PulseClassifier(args.artifacts, args.device)
     classifier.warmup()
     final_whisper = WhisperProcess(args.whisper_binary, args.whisper_model, port=args.whisper_port)

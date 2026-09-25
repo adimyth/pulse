@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay a video through local STT and Pulse Local sentiment inference without retaining extracted audio."""
+"""Replay a video through local STT and Pulse sentiment inference without retaining extracted audio."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ async def replay(args: argparse.Namespace) -> dict:
 
 def parse_args() -> argparse.Namespace:
     """Read the fixture and local runtime choices used by the automatic STT gate."""
-    parser = argparse.ArgumentParser(description="Validate Pulse Local on a prerecorded video fixture.")
+    parser = argparse.ArgumentParser(description="Validate Pulse on a prerecorded video fixture.")
     parser.add_argument("source", type=Path)
     parser.add_argument("--artifacts", type=Path, default=Path("var/pulse-model"))
     parser.add_argument("--whisper-binary", type=Path, default=Path("var/whisper.cpp/build-arm64/bin/whisper-server"))

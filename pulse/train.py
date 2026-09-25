@@ -153,7 +153,7 @@ def train(args: argparse.Namespace) -> dict:
 
 def parse_args() -> argparse.Namespace:
     """Parse a small, reproducible local training configuration suitable for Apple Silicon."""
-    parser = argparse.ArgumentParser(description="Train Pulse Local's text-sentiment model on GoEmotions.")
+    parser = argparse.ArgumentParser(description="Train Pulse's text-sentiment model on GoEmotions.")
     parser.add_argument("--data-dir", type=Path, default=Path("var/goemotions"))
     parser.add_argument("--output", type=Path, default=Path("var/pulse-model"))
     parser.add_argument("--encoder", default=ENCODER)

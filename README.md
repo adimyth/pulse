@@ -1,6 +1,6 @@
-# Pulse Local
+# Pulse
 
-Pulse Local is a separate, local-only live speech-to-sentiment demonstration. A browser microphone stream becomes a live transcript and independently updating text-sentiment dimensions on the same Mac.
+Pulse is a separate, local-only live speech-to-sentiment demonstration. A browser microphone stream becomes a live transcript and independently updating text-sentiment dimensions on the same Mac.
 
 It is deliberately not a banking-intent demo, a cloud service, a customer-scoring system, or a claim to infer a speaker’s hidden feelings from their voice. The first release classifies the text in the live transcript. It does not use pitch, stress, or facial information.
 
@@ -29,6 +29,6 @@ Open `http://127.0.0.1:8050`, start the microphone, and speak naturally in Engli
 
 Training uses the official GoEmotions train/dev/test files, with the source revision, hashes, exact mapping, training seed, and attribution written into the local artifact manifest. Dataset rows, audio, transcripts, and trained weights are ignored by git.
 
-GoEmotions contains English Reddit comments and its labels reflect its annotators and source population. Pulse Local can transcribe supported Whisper languages, but its trained sentiment labels are English-only. It is suitable for a local UI demo, not for employment, health, credit, safety, or automated customer decisions.
+GoEmotions contains English Reddit comments and its labels reflect its annotators and source population. Pulse uses English-only transcription and sentiment labels. It is suitable for a local UI demo, not for employment, health, credit, safety, or automated customer decisions.
 
 See [the validation record](docs/validation.md) for the frozen model’s split metrics and the local video replay timings.

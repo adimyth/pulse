@@ -266,7 +266,7 @@ function escapeHtml(value) {
 function exportTranscript() {
   if (!state.history.length) return;
   const rows = state.history.map(entry => `<p class="utterance" style="color:${entry.color}">${escapeHtml(entry.text)}</p>`).join("\n");
-  const documentText = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Pulse Local transcript</title><style>body{margin:0;padding:44px;max-width:860px;background:#111;color:#f4f3ef;font-family:Inter,system-ui,sans-serif}h1{font-size:1.4rem;margin:0 0 26px}.utterance{margin:0 0 14px;font-size:1.2rem;line-height:1.5}</style></head><body><h1>Pulse Local · Session transcript</h1>${rows}</body></html>`;
+  const documentText = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Pulse transcript</title><style>body{margin:0;padding:44px;max-width:860px;background:#111;color:#f4f3ef;font-family:Inter,system-ui,sans-serif}h1{font-size:1.4rem;margin:0 0 26px}.utterance{margin:0 0 14px;font-size:1.2rem;line-height:1.5}</style></head><body><h1>Pulse · Session transcript</h1>${rows}</body></html>`;
   const download = document.createElement("a");
   download.href = URL.createObjectURL(new Blob([documentText], { type: "text/html" }));
   download.download = `pulse-transcript-${new Date().toISOString().replaceAll(":", "-")}.html`;

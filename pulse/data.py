@@ -19,7 +19,7 @@ SOURCE_URLS = {name: f"{SOURCE_BASE}/{name}" for name in ("train.tsv", "dev.tsv"
 
 @dataclass(frozen=True)
 class Example:
-    """A single text record with independent target values for Pulse Local's documented dimensions."""
+    """A single text record with independent target values for Pulse's documented dimensions."""
 
     text: str
     targets: tuple[float, ...]

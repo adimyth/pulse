@@ -38,4 +38,4 @@ root.mkdir(parents=True, exist_ok=True)
 (root / "stt-selection.json").write_text(json.dumps({"selected_model": sys.argv[2], "selection_rule": "first model passing transcript and timing gates"}, indent=2) + "\n", encoding="utf-8")
 PY
 
-echo "Pinned ${selected} for Pulse Local"
+echo "Pinned ${selected} for Pulse"

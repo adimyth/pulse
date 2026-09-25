@@ -87,10 +87,10 @@ class PulseClassifier:
         root = Path(artifacts)
         metadata_path, weights_path = root / "metadata.json", root / "model.safetensors"
         if not metadata_path.is_file() or not weights_path.is_file():
-            raise FileNotFoundError("missing Pulse Local artifacts; run `uv run python -m pulse.train` first")
+            raise FileNotFoundError("missing Pulse artifacts; run `uv run python -m pulse.train` first")
         self.metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         if tuple(self.metadata.get("dimensions", ())) != DIMENSIONS:
-            raise ValueError("artifact dimensions do not match this Pulse Local release")
+            raise ValueError("artifact dimensions do not match this Pulse release")
         # Whisper owns Metal in the live path. MiniLM is faster and more stable on the local CPU while Whisper is decoding, and callers can still explicitly request another backend.
         self.device = torch.device(device_name) if device_name else torch.device("cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(self.metadata.get("encoder", ENCODER), local_files_only=True)

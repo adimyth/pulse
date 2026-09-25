@@ -1,4 +1,4 @@
-"""Refit calibration for an already selected Pulse Local checkpoint without changing its learned weights."""
+"""Refit calibration for an already selected Pulse checkpoint without changing its learned weights."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from .train import fit_temperatures, logits_for, metrics
 
 def main() -> None:
     """Use the official development split for temperatures, then update the artifact with one final test record."""
-    parser = argparse.ArgumentParser(description="Refit Pulse Local calibration without retraining weights.")
+    parser = argparse.ArgumentParser(description="Refit Pulse calibration without retraining weights.")
     parser.add_argument("--artifacts", type=Path, default=Path("var/pulse-model"))
     parser.add_argument("--data-dir", type=Path, default=Path("var/goemotions"))
     parser.add_argument("--device")

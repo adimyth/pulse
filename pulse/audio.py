@@ -1,4 +1,4 @@
-"""Loopback-only rolling audio, Whisper transport, and live-event mechanics for Pulse Local."""
+"""Loopback-only rolling audio, Whisper transport, and live-event mechanics for Pulse."""
 
 from __future__ import annotations
 
@@ -159,9 +159,9 @@ class WhisperClient:
 
     def __init__(self, base_url: str = "http://127.0.0.1:8178", timeout_s: float = 12.0, language: str = "en") -> None:
         if not loopback_url(base_url):
-            raise ValueError("Pulse Local only permits a loopback Whisper server")
+            raise ValueError("Pulse only permits a loopback Whisper server")
         if language != "en":
-            raise ValueError("Pulse Local is configured for English-only STT")
+            raise ValueError("Pulse is configured for English-only STT")
         self.base_url, self.timeout_s, self.language = base_url.rstrip("/"), timeout_s, language
 
     async def transcribe(self, wav: bytes) -> Transcription:
@@ -186,7 +186,7 @@ class WhisperProcess:
 
     def __init__(self, binary: str | Path, model: str | Path, host: str = "127.0.0.1", port: int = 8178) -> None:
         if host not in {"127.0.0.1", "localhost"}:
-            raise ValueError("Pulse Local refuses a non-loopback Whisper server")
+            raise ValueError("Pulse refuses a non-loopback Whisper server")
         self.binary, self.model, self.host, self.port = Path(binary), Path(model), host, port
         self.process: Popen | None = None
 
@@ -217,7 +217,7 @@ async def wait_for_whisper(base_url: str, timeout_s: float = 45) -> None:
     import httpx
 
     if not loopback_url(base_url):
-        raise ValueError("Pulse Local only permits a loopback Whisper server")
+        raise ValueError("Pulse only permits a loopback Whisper server")
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         try:
