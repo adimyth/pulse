@@ -1,4 +1,4 @@
-const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, liveText: "", history: [], raf: null, accent: "#7aa6ff", signalStrength: .12, currentWave: [], sessionWave: [], waveFramePeak: 0, waveFrameSamples: 0, currentWaveOpen: false };
+const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, audioFrames: 0, inputWarningTimer: null, liveText: "", history: [], raf: null, accent: "#7aa6ff", signalStrength: .12, currentWave: [], sessionWave: [], waveFramePeak: 0, waveFrameSamples: 0, currentWaveOpen: false };
 const transcript = document.querySelector("#transcript");
 const transcriptHistory = document.querySelector("#transcript-history");
 const transcriptScroll = document.querySelector("#transcript-scroll");
@@ -132,6 +132,7 @@ function appendWaveSample(amplitude) {
     state.currentWave = [];
     state.currentWaveOpen = true;
     signalArea.dataset.speaking = "true";
+    resizeCanvas();
     setText("#current-wave-state", "Speaking");
   }
   if (state.currentWaveOpen) {
@@ -217,6 +218,8 @@ function downsample(input) {
 async function startMicrophone() {
   state.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   state.context = new AudioContext();
+  await state.context.resume();
+  if (state.context.state !== "running") throw new Error("the browser did not start the microphone audio context");
   state.sourceRate = state.context.sampleRate;
   await state.context.audioWorklet.addModule("/static/capture-worklet.js");
   state.source = state.context.createMediaStreamSource(state.stream);
@@ -225,22 +228,33 @@ async function startMicrophone() {
   state.capture = new AudioWorkletNode(state.context, "pulse-capture");
   state.mute = state.context.createGain();
   state.mute.gain.value = 0;
-  state.capture.port.onmessage = ({ data }) => { recordWaveform(data); downsample(data); };
+  state.audioFrames = 0;
+  state.capture.port.onmessage = ({ data }) => {
+    state.audioFrames += 1;
+    if (state.audioFrames === 1) setText("#wave-copy", "Audio input received · transcribing locally");
+    recordWaveform(data);
+    downsample(data);
+  };
   state.source.connect(state.analyser);
   state.source.connect(state.capture);
   state.capture.connect(state.mute);
   state.mute.connect(state.context.destination);
   document.querySelector(".record-dot").classList.add("active");
   setText("#wave-copy", "Session waveform · listening locally");
+  clearTimeout(state.inputWarningTimer);
+  state.inputWarningTimer = setTimeout(() => {
+    if (state.stream && state.audioFrames === 0) setText("#wave-copy", "No microphone signal · check browser input");
+  }, 2000);
 }
 
 function closeMicrophone() {
+  clearTimeout(state.inputWarningTimer);
   state.capture?.disconnect();
   state.source?.disconnect();
   state.mute?.disconnect();
   state.stream?.getTracks().forEach(track => track.stop());
   state.context?.close();
-  Object.assign(state, { stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0 });
+  Object.assign(state, { stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, audioFrames: 0, inputWarningTimer: null });
   document.querySelector(".record-dot").classList.remove("active");
   if (state.currentWaveOpen) finishCurrentWave();
   setText("#wave-copy", "Session waveform · microphone inactive");
