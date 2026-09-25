@@ -13,6 +13,7 @@ const canvas = document.querySelector("#waveform");
 const drawing = canvas.getContext("2d");
 const signalCanvas = document.querySelector("#signal-wave");
 const signalDrawing = signalCanvas.getContext("2d");
+const pressureBlock = document.querySelector(".pressure");
 const tones = { frustration: "#ef5c5f", positive: "#e5c23e", surprise: "#bc8def", uncertainty: "#7aa6ff", low_mood: "#758290", neutral: "#b5bbc5" };
 const nonSpeechCaptions = new Set(["blank audio", "silence", "howling wind", "wind", "wind blowing", "crowd cheer", "crowd cheering", "cheering", "applause", "engine revving", "engine reving", "keyboard clicking", "typing", "background noise", "music", "laughter", "non english speech", "speaking in foreign language", "foreign language"]);
 const WAVE_SAMPLE_WINDOW = .025;
@@ -70,11 +71,13 @@ function renderSentiment(result) {
   setText("#dominant", dominant === "Listening" ? dominant : dominant.replace("_", " "));
   result.scores.forEach((score, index) => {
     const meter = meters[index];
+    meter.dataset.active = "true";
     meter.querySelector("strong").textContent = `${score.level} · ${Math.round(score.value * 100)}%`;
     meter.querySelector("b").style.width = `${Math.round(score.value * 100)}%`;
   });
   const pressure = Math.round(result.action_pressure * 100);
   setText("#pressure", pressure ? `${pressure}% urgency cue` : "No urgency cue");
+  pressureBlock.dataset.active = String(Boolean(pressure));
   document.querySelector("#pressure-bar").style.width = `${pressure}%`;
 }
 
@@ -158,9 +161,6 @@ function drawEnvelope(context, target, values, amplitudeOf, colorOf, active) {
   const width = target.clientWidth;
   const height = target.clientHeight;
   context.clearRect(0, 0, width, height);
-  const centre = height / 2;
-  context.fillStyle = "#2e2e2e";
-  context.fillRect(0, centre, width, 1);
   if (!values.length) return;
   const bars = Math.max(1, Math.min(Math.floor(width / 5), values.length));
   for (let index = 0; index < bars; index += 1) {
@@ -256,9 +256,10 @@ function resetDisplay() {
   state.currentWaveOpen = false;
   transcript.textContent = "Press start and speak naturally.";
   transcript.style.color = "#707070";
-  meters.forEach(meter => { meter.querySelector("strong").textContent = "—"; meter.querySelector("b").style.width = "0%"; });
+  meters.forEach(meter => { meter.dataset.active = "false"; meter.querySelector("strong").textContent = "—"; meter.querySelector("b").style.width = "0%"; });
   setText("#dominant", "Listening");
   setText("#pressure", "Waiting for speech");
+  pressureBlock.dataset.active = "false";
   document.querySelector("#pressure-bar").style.width = "0%";
   setText("#stt", "STT —");
   setText("#classifier", "Text model —");
