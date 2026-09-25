@@ -20,16 +20,37 @@ The model reports independent scores for Frustration, Positive, Surprise, Uncert
 
 The project does not invoke Compass’s Qwen decision server in the 300 ms live loop. That model would add avoidable latency. This project keeps the useful Compass discipline—local inference, calibrated typed outputs, provenance, and abstention—while using a dedicated lightweight model for live interaction.
 
-## First run
+## Run Pulse locally
+
+### Requirements
+
+- An Apple Silicon Mac running macOS. The bootstrap script builds `whisper.cpp` with Metal support for arm64.
+- `git`, `cmake`, and [`uv`](https://docs.astral.sh/uv/). Install Apple’s command-line tools with `xcode-select --install` if they are not already installed; Homebrew users can run `brew install cmake uv`.
+- A current browser that can grant microphone permission to `http://127.0.0.1:8050`.
+- An internet connection for first-time setup only, to fetch the pinned Whisper source and models, Python dependencies, the MiniLM base model, and GoEmotions. Runtime audio and inference remain on the Mac.
+
+### From a fresh clone
 
 ```sh
+git clone <repository-url> pulse
+cd pulse
+
+# Builds the pinned Metal-enabled whisper.cpp server and downloads medium.en + small.en.
 scripts/bootstrap.sh
+
+# Downloads the public training source, trains the local text model, and writes the local artifact.
 uv run python -m pulse.train
-scripts/validate_fixture.sh /absolute/path/to/video.mp4
+
+# Optional but recommended: replay the included recording before using the microphone.
+scripts/validate_fixture.sh assets/pulse.mov
+
+# Starts Pulse and both loopback-only Whisper servers. Keep this terminal open.
 scripts/run.sh
 ```
 
-Open `http://127.0.0.1:8050`, start the microphone, and speak naturally in English. The fixture command prefers `medium.en`, then retries `small.en` and `base.en` only when the prior model misses the transcript or timing gate.
+Open `http://127.0.0.1:8050`, select **Start listening**, allow microphone access, and speak naturally in English. The footer reports when audio input is arriving. `small.en` supplies fast provisional text; after a natural pause, `medium.en` replaces it with the retained final transcript. The fixture command prefers `medium.en`, then retries `small.en` and `base.en` only when the prior model misses the transcript or timing gate.
+
+If the dashboard says it cannot reach the local server, confirm that `scripts/run.sh` is still running and reload the page. If it reports no microphone signal, verify that the browser granted `127.0.0.1` microphone access and that the correct input device is selected. Pulse is English-only in this release.
 
 ## Data and limitations
 
