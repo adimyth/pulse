@@ -4,6 +4,12 @@ Pulse is a separate, local-only live speech-to-sentiment demonstration. A browse
 
 It is deliberately not a banking-intent demo, a cloud service, a customer-scoring system, or a claim to infer a speaker’s hidden feelings from their voice. The first release classifies the text in the live transcript. It does not use pitch, stress, or facial information.
 
+## Origin and recording
+
+Pulse was inspired by this [ElevenLabs Developers post](https://x.com/ElevenLabsDevs/status/2102884507078791484). I wanted to build real-time sentiment analysis myself, with the whole experience running locally on a Mac.
+
+The included [Pulse recording](assets/pulse.mov) uses the same audio as the inspiration for an apples-to-apples demonstration of the live transcription and sentence-level sentiment flow. It is a reproducible demo fixture, not training data.
+
 ## The dimensions
 
 The model reports independent scores for Frustration, Positive, Surprise, Uncertainty, Low mood, and Neutral. They are derived transparently from human-annotated GoEmotions categories rather than invented labels. The UI also shows Action pressure as a separate lexical cue for phrases such as “urgent”, “right now”, or “cannot wait”; it is not presented as an emotion.
