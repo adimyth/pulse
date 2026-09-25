@@ -7,15 +7,7 @@
 https://github.com/user-attachments/assets/4847ee52-1a08-4682-9f6c-95f133430c91
 
 - Inspired by [this ElevenLabs Developers post](https://x.com/ElevenLabsDevs/status/2102884507078791484).
-- I built Pulse to make the changing emotional texture of a live conversation tangible, sentence by sentence, while keeping the whole experience on my Mac.
-- The recording uses the same spoken audio as the inspiration so the comparison is about the live transcription and analysis itself.
-
-## In the moment
-
-1. **Listen:** the browser captures speech and streams it to the local app.
-2. **Understand:** Pulse drafts the words while someone is speaking, then replaces them with a stronger final transcription after a natural pause.
-3. **Reveal the tone:** every completed sentence receives its own colour and independent emotion scores, so a thank-you, a complaint, and an urgent request do not collapse into one label.
-4. **Keep the thread:** the transcript and waveform remain visible for the whole session.
+- The recording uses the same spoken audio as the ElevenLabs Developers post above, so the comparison is about the live transcription and analysis itself.
 
 ## Signals
 
