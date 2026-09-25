@@ -1,22 +1,21 @@
 # Pulse
 
-> A fully local, real-time speech-to-text and text-sentiment demo for English conversation on Apple Silicon.
+> Pulse makes the emotional shape of a conversation visible as it unfolds: spoken words become a live, colour-coded transcript, sentence by sentence, with emotion and urgency shifting in real time.
 
-## Demo
+## Watch Pulse
 
-![](https://github.com/user-attachments/assets/9cdca8f0-78e4-4501-87a4-34a128316fec)
+https://github.com/user-attachments/assets/4847ee52-1a08-4682-9f6c-95f133430c91
 
 - Inspired by [this ElevenLabs Developers post](https://x.com/ElevenLabsDevs/status/2102884507078791484).
-- I wanted to build the real-time sentiment layer myself and keep the entire experience on a Mac.
-- The recording deliberately uses the same audio as the inspiration, so it demonstrates the transcription and sentence-level sentiment flow against the same input.
+- I built Pulse to make the changing emotional texture of a live conversation tangible, sentence by sentence, while keeping the whole experience on my Mac.
+- The recording uses the same spoken audio as the inspiration so the comparison is about the live transcription and analysis itself.
 
-## What Pulse does
+## In the moment
 
-1. Captures microphone audio in the browser.
-2. Produces provisional English transcripts while someone is speaking.
-3. Scores each completed sentence independently, so mixed sentiment is visible as it arrives.
-4. Replaces the provisional text with a more accurate final transcript after a natural pause.
-5. Keeps the colored transcript and speech waveform on screen for the session.
+1. **Listen:** the browser captures speech and streams it to the local app.
+2. **Understand:** Pulse drafts the words while someone is speaking, then replaces them with a stronger final transcription after a natural pause.
+3. **Reveal the tone:** every completed sentence receives its own colour and independent emotion scores, so a thank-you, a complaint, and an urgent request do not collapse into one label.
+4. **Keep the thread:** the transcript and waveform remain visible for the whole session.
 
 ## Signals
 
@@ -32,7 +31,7 @@
 
 The six emotion signals are independent multi-label scores. A sentence can be both positive and urgent, or frustrated and uncertain.
 
-## How it works locally
+## Under the hood
 
 | Stage | Runs on | Job |
 | --- | --- | --- |
@@ -79,12 +78,6 @@ scripts/run.sh
 ```
 
 Open `http://127.0.0.1:8050`, select **Start listening**, and allow microphone access.
-
-### Verify the demo recording
-
-```sh
-scripts/validate_fixture.sh assets/pulse.mov
-```
 
 ### Train a new local artifact
 
