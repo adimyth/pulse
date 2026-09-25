@@ -4,7 +4,7 @@
 
 ## Demo
 
-![](assets/pulse.mov)
+![](https://github.com/user-attachments/assets/9cdca8f0-78e4-4501-87a4-34a128316fec)
 
 - Inspired by [this ElevenLabs Developers post](https://x.com/ElevenLabsDevs/status/2102884507078791484).
 - I wanted to build the real-time sentiment layer myself and keep the entire experience on a Mac.
