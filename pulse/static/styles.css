@@ -15,9 +15,9 @@ button { font: inherit; }
 .transcript-area { padding: 34px 42px 29px; border-right: 1px solid #2b2b2b; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 18px; min-height: 0; }
 .section-label { color: #898989; font-size: .68rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
 .transcript-scroll { min-height: 0; overflow-y: auto; padding-right: 17px; scroll-behavior: smooth; scrollbar-color: #484848 transparent; }
-.transcript-history { display: grid; gap: 13px; margin: 0 0 18px; padding: 0; list-style: none; }
-.transcript-history li { max-width: 900px; }
-.transcript-history p { margin: 0; color: #c9c8c3; font-size: clamp(1rem, 1.3vw, 1.28rem); line-height: 1.48; }
+.transcript-history { margin: 0 0 18px; padding: 0; list-style: none; }
+.transcript-history li { max-width: 900px; margin: 0 0 16px; }
+.transcript-history p { margin: 0; color: #c9c8c3; font-size: clamp(1rem, 1.3vw, 1.28rem); line-height: 1.58; }
 .transcript { max-width: 900px; margin: 0; min-height: 76px; font-size: clamp(1.35rem, 2.2vw, 2.35rem); line-height: 1.25; letter-spacing: -.035em; color: #707070; transition: color .2s ease; }
 .signal-area { padding: 26px 30px 25px; display: flex; flex-direction: column; }
 .wave-caption { display: flex; justify-content: space-between; margin: 0 0 7px; color: #9a9a9a; font-size: .61rem; font-weight: 750; letter-spacing: .11em; text-transform: uppercase; }

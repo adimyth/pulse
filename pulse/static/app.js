@@ -36,17 +36,23 @@ function sentenceAccent(sentence, supported) {
 
 function archiveTranscript(event) {
   const sentences = event.sentences?.length ? event.sentences : [{ text: event.transcript, sentiment: event.sentiment }];
+  const entry = document.createElement("li");
+  const content = document.createElement("p");
+  let appended = false;
   for (const sentence of sentences) {
     if (!isHumanTranscript(sentence.text)) continue;
-    const entry = document.createElement("li");
-    const content = document.createElement("p");
     const color = sentenceAccent(sentence, event.sentiment_supported);
-    content.textContent = sentence.text;
-    content.style.color = color;
-    entry.append(content);
-    transcriptHistory.append(entry);
+    const fragment = document.createElement("span");
+    fragment.textContent = sentence.text;
+    fragment.style.color = color;
+    if (appended) content.append(" ");
+    content.append(fragment);
     state.history.push({ text: sentence.text, color });
+    appended = true;
   }
+  if (!appended) return;
+  entry.append(content);
+  transcriptHistory.append(entry);
   exportButton.disabled = false;
   transcript.textContent = "Listening for the next thought…";
   transcript.style.color = "#707070";
