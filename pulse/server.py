@@ -13,7 +13,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .audio import LiveSession, WhisperClient, WhisperProcess, wait_for_whisper
+from .audio import SAMPLE_RATE, LiveSession, WhisperClient, WhisperProcess, pcm_to_wav, wait_for_whisper
 from .model import PulseClassifier
 
 
@@ -37,11 +37,13 @@ def create_app(classifier, transcriber) -> FastAPI:
     async def live(socket: WebSocket) -> None:
         await socket.accept()
         session = LiveSession(classifier, transcriber)
+        pending: tuple[object, asyncio.Task] | None = None
+        stopping = False
         await socket.send_json({"type": "ready", "sample_rate": 16_000, "refresh_ms": 300, "final_silence_ms": 700, "local_only": True})
         try:
             while True:
                 try:
-                    message = await asyncio.wait_for(socket.receive(), timeout=0.04)
+                    message = await asyncio.wait_for(socket.receive(), timeout=0.02)
                 except TimeoutError:
                     message = None
                 if message is not None:
@@ -59,21 +61,51 @@ def create_app(classifier, transcriber) -> FastAPI:
                             session.start()
                             await socket.send_json({"type": "started"})
                         elif command == {"type": "stop"}:
+                            if pending is not None:
+                                pending[1].cancel()
+                                pending = None
+                            final_request = session.force_final_request(time.perf_counter() * 1000)
+                            if final_request is None:
+                                session.stop()
+                                await socket.send_json({"type": "stopped"})
+                            else:
+                                pending = (final_request, asyncio.create_task(session.transcribe_request(final_request)))
+                                stopping = True
+                        elif command == {"type": "discard"}:
+                            if pending is not None:
+                                pending[1].cancel()
+                                pending = None
+                            stopping = False
                             session.stop()
-                            await socket.send_json({"type": "stopped"})
+                            await socket.send_json({"type": "stopped", "discarded": True})
                         else:
-                            await socket.send_json({"type": "error", "message": "only start and stop are supported"})
-                try:
-                    event = await session.tick(time.perf_counter() * 1000)
-                except Exception as exc:
-                    session.discard_current_utterance()
-                    await socket.send_json({"type": "error", "message": str(exc)})
-                    continue
-                if event:
-                    await socket.send_json(event)
+                            await socket.send_json({"type": "error", "message": "only start, stop, and discard are supported"})
+                if pending is not None and pending[1].done():
+                    request, task = pending
+                    pending = None
+                    try:
+                        event = session.complete_request(request, task.result())
+                    except asyncio.CancelledError:
+                        event = None
+                    except Exception as exc:
+                        session.discard_current_utterance()
+                        await socket.send_json({"type": "error", "message": str(exc)})
+                        event = None
+                    if event:
+                        await socket.send_json(event)
+                    if stopping:
+                        session.stop()
+                        stopping = False
+                        await socket.send_json({"type": "stopped"})
+                if pending is None and not stopping:
+                    request = session.next_request(time.perf_counter() * 1000)
+                    if request is not None:
+                        pending = (request, asyncio.create_task(session.transcribe_request(request)))
         except WebSocketDisconnect:
             return
         finally:
+            if pending is not None:
+                pending[1].cancel()
             session.stop()
 
     return app
@@ -105,7 +137,9 @@ def main() -> None:
     whisper.start()
     try:
         asyncio.run(wait_for_whisper(f"http://127.0.0.1:{args.whisper_port}"))
-        uvicorn.run(create_app(classifier, WhisperClient(f"http://127.0.0.1:{args.whisper_port}", language="en")), host=args.host, port=args.port, workers=1)
+        transcriber = WhisperClient(f"http://127.0.0.1:{args.whisper_port}", language="en")
+        asyncio.run(transcriber.transcribe(pcm_to_wav(b"\0" * SAMPLE_RATE * 2)))
+        uvicorn.run(create_app(classifier, transcriber), host=args.host, port=args.port, workers=1)
     finally:
         whisper.stop()
 

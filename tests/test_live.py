@@ -117,6 +117,24 @@ def test_final_transcription_receives_the_full_active_utterance_not_only_the_liv
     asyncio.run(run())
 
 
+def test_final_flush_preserves_audio_arriving_during_its_background_decode():
+    async def run() -> None:
+        session = LiveSession(FakeClassifier(), FakeTranscriber())
+        session.start()
+        session.push_pcm(pcm(2000, 640), 0)
+        request = session.force_final_request(700)
+        assert request is not None
+        later_audio = pcm(2000, 320)
+        session.push_pcm(later_audio, 900)
+        event = session.complete_request(request, await session.transcribe_request(request))
+        assert event is not None
+        assert event["type"] == "final"
+        assert session.utterance == bytearray(later_audio)
+        assert session.last_speech_ms == 900
+
+    asyncio.run(run())
+
+
 def test_dashboard_websocket_contract_is_local_and_testable():
     from fastapi.testclient import TestClient
 
@@ -127,5 +145,8 @@ def test_dashboard_websocket_contract_is_local_and_testable():
             assert socket.receive_json()["type"] == "ready"
             socket.send_json({"type": "start"})
             assert socket.receive_json() == {"type": "started"}
+            socket.send_bytes(pcm(2000, 640))
             socket.send_json({"type": "stop"})
+            final = socket.receive_json()
+            assert final["type"] == "final"
             assert socket.receive_json() == {"type": "stopped"}

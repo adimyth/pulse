@@ -74,6 +74,18 @@ class Transcription:
     language: str | None = None
 
 
+@dataclass(frozen=True)
+class TranscriptionRequest:
+    """An immutable audio snapshot that can decode in the background while the WebSocket continues receiving microphone frames."""
+
+    audio: bytes
+    final: bool
+    requested_at_ms: float
+    utterance_bytes: int
+    prior_text: str
+    prior_language: str | None
+
+
 class Transcriber(Protocol):
     """The small transport interface makes the live state machine testable without a microphone or model."""
 
@@ -243,8 +255,8 @@ class LiveSession:
         if speech_present(pcm):
             self.last_speech_ms = now_ms
 
-    async def tick(self, now_ms: float) -> dict[str, Any] | None:
-        """Refresh a transcript at the live cadence and classify every non-empty refresh before finalizing silence."""
+    def next_request(self, now_ms: float) -> TranscriptionRequest | None:
+        """Snapshot the next decode without awaiting it so microphone transport never waits on Whisper inference."""
         if not self.active or self.last_speech_ms is None:
             return None
         if self.last_tick_ms is None:
@@ -255,26 +267,38 @@ class LiveSession:
             return None
         self.last_tick_ms = now_ms
         audio = self.utterance if final else self.window
-        transcript = await self.transcriber.transcribe(pcm_to_wav(bytes(audio)))
+        return TranscriptionRequest(audio=bytes(audio), final=final, requested_at_ms=now_ms, utterance_bytes=len(self.utterance), prior_text=self.last_human_transcript or "", prior_language=self.last_human_language)
+
+    def force_final_request(self, now_ms: float) -> TranscriptionRequest | None:
+        """Flush received speech on Stop so the last phrase is retained even when the user does not pause first."""
+        if not self.active or self.last_speech_ms is None or not self.utterance:
+            return None
+        self.last_tick_ms = now_ms
+        return TranscriptionRequest(audio=bytes(self.utterance), final=True, requested_at_ms=now_ms, utterance_bytes=len(self.utterance), prior_text=self.last_human_transcript or "", prior_language=self.last_human_language)
+
+    async def transcribe_request(self, request: TranscriptionRequest) -> Transcription:
+        """Decode a detached request while new browser PCM continues entering the session buffers."""
+        return await self.transcriber.transcribe(pcm_to_wav(request.audio))
+
+    def complete_request(self, request: TranscriptionRequest, transcript: Transcription) -> dict[str, Any] | None:
+        """Merge one completed decode, preserve later-arriving audio, and emit one ordered dashboard event."""
         candidate = " ".join(transcript.text.split())
         language = transcript.language
         if not candidate:
-            if final and self.last_human_transcript:
-                text = self.last_human_transcript
-                language = self.last_human_language
-            elif final:
-                self.window.clear()
-                self.utterance.clear()
-                self.last_speech_ms = self.last_audio_ms = None
+            if request.final and request.prior_text:
+                text = request.prior_text
+                language = request.prior_language
+            elif request.final:
+                self._clear_finished_request(request)
                 return None
             else:
                 return None
-        elif final:
-            text = candidate
+        elif request.final:
+            text = merge_live_transcript(request.prior_text, candidate) if request.prior_text else candidate
         else:
-            text = merge_live_transcript(self.last_human_transcript or "", candidate)
+            text = merge_live_transcript(request.prior_text, candidate)
         sentiment_supported = supports_sentiment(language)
-        if final:
+        if request.final:
             sentences = []
             for segment in sentence_segments(text):
                 segment_sentiment = self.classifier.classify(segment) if sentiment_supported else unavailable_sentiment(language, getattr(self.classifier, "model_id", "pulse-local"))
@@ -287,14 +311,29 @@ class LiveSession:
             classifier_latency = sentiment.latency_ms
         self.sequence += 1
         completed = time.perf_counter() * 1000
-        event = {"type": "final" if final else "partial", "sequence": self.sequence, "transcript": text, "sentences": sentences, "language": language, "sentiment_supported": sentiment_supported, "sentiment": sentiment.to_dict(), "timings_ms": {"stt": round(transcript.latency_ms, 3), "classifier": classifier_latency, "audio_to_ui": round(completed - (self.last_audio_ms or completed), 3)}}
-        if final:
-            self.window.clear()
-            self.utterance.clear()
-            self.last_speech_ms = self.last_audio_ms = None
-            self.last_human_transcript = None
-            self.last_human_language = None
+        event = {"type": "final" if request.final else "partial", "sequence": self.sequence, "transcript": text, "sentences": sentences, "language": language, "sentiment_supported": sentiment_supported, "sentiment": sentiment.to_dict(), "timings_ms": {"stt": round(transcript.latency_ms, 3), "classifier": classifier_latency, "audio_to_ui": round(completed - (self.last_audio_ms or completed), 3)}}
+        if request.final:
+            self._clear_finished_request(request)
         else:
             self.last_human_transcript = text
             self.last_human_language = language
         return event
+
+    def _clear_finished_request(self, request: TranscriptionRequest) -> None:
+        """Remove only the decoded prefix so frames that arrived during a final decode remain available for the next utterance."""
+        del self.utterance[:request.utterance_bytes]
+        if self.utterance:
+            self.window = bytearray(self.utterance[-self.max_window_bytes:])
+        else:
+            self.window.clear()
+        if self.last_speech_ms is None or self.last_speech_ms <= request.requested_at_ms:
+            self.last_speech_ms = self.last_audio_ms = None
+        self.last_human_transcript = None
+        self.last_human_language = None
+
+    async def tick(self, now_ms: float) -> dict[str, Any] | None:
+        """Keep the simple awaitable API for unit tests while production dispatches the same work in a background task."""
+        request = self.next_request(now_ms)
+        if request is None:
+            return None
+        return self.complete_request(request, await self.transcribe_request(request))

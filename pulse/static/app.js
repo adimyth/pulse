@@ -2,6 +2,7 @@ const state = { ws: null, stream: null, context: null, source: null, capture: nu
 const transcript = document.querySelector("#transcript");
 const transcriptHistory = document.querySelector("#transcript-history");
 const transcriptScroll = document.querySelector("#transcript-scroll");
+const stage = document.querySelector(".stage");
 const meters = [...document.querySelectorAll(".meter")];
 const startButton = document.querySelector("#start");
 const stopButton = document.querySelector("#stop");
@@ -58,7 +59,7 @@ function archiveTranscript(event) {
   transcript.textContent = "Listening for the next thought…";
   transcript.style.color = "#707070";
   state.liveText = "";
-  requestAnimationFrame(() => { transcriptScroll.scrollTop = transcriptScroll.scrollHeight; });
+  requestAnimationFrame(() => { stage.scrollTop = stage.scrollHeight; });
 }
 
 function renderSentiment(result) {
@@ -294,32 +295,42 @@ async function start() {
     if (message.type === "ready") { setText("#connection", "Local engine ready"); return; }
     if (message.type === "started") {
       try { await startMicrophone(); stopButton.disabled = false; setText("#connection", "Listening"); }
-      catch (error) { setText("#connection", `Microphone permission failed: ${error.message}`); state.ws.send(JSON.stringify({ type: "stop" })); startButton.disabled = false; }
+      catch (error) { setText("#connection", `Microphone permission failed: ${error.message}`); state.ws.send(JSON.stringify({ type: "discard" })); startButton.disabled = false; }
       return;
     }
-    if (message.type === "stopped") { setText("#connection", "Stopped · audio discarded"); return; }
+    if (message.type === "stopped") {
+      closeMicrophone();
+      state.ws?.close();
+      state.ws = null;
+      stopButton.disabled = true;
+      startButton.disabled = false;
+      setText("#connection", message.discarded ? "Stopped · audio discarded" : "Stopped · final transcript retained");
+      return;
+    }
     if (message.type === "error") { setText("#connection", `Local error: ${message.message}`); setText("#wave-copy", "Recovering local speech recognition…"); return; }
     if (message.type === "partial" || message.type === "final") renderEvent(message);
   };
   state.ws.onclose = () => {
-    if (!state.stream) return;
-    closeMicrophone();
+    if (state.stream) closeMicrophone();
     stopButton.disabled = true;
     startButton.disabled = false;
   };
 }
 
-function stop() {
+function stop(discard = false) {
   stopButton.disabled = true;
-  if (state.ws?.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify({ type: "stop" }));
   closeMicrophone();
+  if (state.ws?.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify({ type: discard ? "discard" : "stop" }));
+    return;
+  }
   state.ws?.close();
   state.ws = null;
   startButton.disabled = false;
 }
 
 function resetSession() {
-  stop();
+  stop(true);
   resetDisplay();
 }
 
