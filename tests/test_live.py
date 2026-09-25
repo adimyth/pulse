@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from pulse.audio import LiveSession, Transcription, WhisperClient, human_speech_text, pcm_to_wav, speech_present
+from pulse.audio import LiveSession, Transcription, WhisperClient, human_speech_text, pcm_to_wav, sentence_segments, speech_present
 from pulse.labels import DIMENSIONS, DISPLAY_NAMES
 from pulse.model import SentimentResult, SentimentScore
 from pulse.server import create_app
@@ -16,7 +16,6 @@ class FakeClassifier:
     model_id = "pulse-test"
 
     def classify(self, text: str) -> SentimentResult:
-        assert text == "I am happy but this is frustrating"
         scores = tuple(SentimentScore(key=key, label=DISPLAY_NAMES[key], value=.8 if key in {"positive", "frustration"} else .1, level="high" if key in {"positive", "frustration"} else "low") for key in DIMENSIONS)
         return SentimentResult(scores=scores, action_pressure=0.0, dominant="frustration", abstained=False, latency_ms=3.0)
 
@@ -46,6 +45,10 @@ def test_pure_sound_captions_do_not_become_transcript_entries():
     assert human_speech_text("I need help with this charge") == "I need help with this charge"
 
 
+def test_sentence_segments_preserve_complete_sentences_for_independent_coloring():
+    assert sentence_segments("Hello. This charge is wrong! Please help") == ("Hello.", "This charge is wrong!", "Please help")
+
+
 def test_live_session_emits_every_partial_then_one_final_and_clears_pcm():
     async def run() -> None:
         session = LiveSession(FakeClassifier(), FakeTranscriber())
@@ -61,6 +64,7 @@ def test_live_session_emits_every_partial_then_one_final_and_clears_pcm():
         session.push_pcm(pcm(0), 650)
         final = await session.tick(1100)
         assert final["type"] == "final"
+        assert final["sentences"] == [{"text": "I am happy but this is frustrating", "sentiment": final["sentiment"]}]
         assert session.window == bytearray()
         assert session.utterance == bytearray()
         session.stop()

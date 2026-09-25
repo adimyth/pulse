@@ -9,19 +9,17 @@
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <div class="brand"><span class="brand-mark"></span><span>Pulse Local</span><span class="local-badge">On this Mac</span></div>
-        <div class="topbar-right"><span id="connection" class="connection">Local engine ready</span><button id="export" class="utility" disabled>Export</button><button id="reset" class="utility">Reset</button><button id="start" class="record">Start listening</button><button id="stop" class="stop" disabled>Stop</button></div>
+        <div class="brand"><span class="brand-mark"></span><span>Pulse Local</span></div>
+        <div class="topbar-right"><span id="connection" class="sr-only" aria-live="polite">Local engine ready</span><button id="export" class="utility" disabled>Export</button><button id="reset" class="utility">Reset</button><button id="start" class="record">Start listening</button><button id="stop" class="stop" disabled>Stop</button></div>
       </header>
 
       <section class="stage">
         <article class="transcript-area">
-          <div class="section-label"><span>Session transcript</span><span id="utterance-state">Idle</span></div>
+          <div class="section-label"><span>Transcript</span></div>
           <div id="transcript-scroll" class="transcript-scroll">
             <ol id="transcript-history" class="transcript-history" aria-label="Completed utterances"></ol>
             <p id="transcript" class="transcript" aria-live="polite">Press start and speak naturally.</p>
           </div>
-          <p id="context-state" class="context-state">Audio and inference stay on this Mac.</p>
-          <div class="event-meta"><span id="event-kind">Awaiting speech</span><span id="latency">—</span></div>
         </article>
 
         <aside class="signal-area">
