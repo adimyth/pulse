@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from pulse.audio import LiveSession, Transcription, WhisperClient, human_speech_text, merge_live_transcript, pcm_to_wav, sentence_segments, speech_present
+from pulse.audio import LiveSession, Transcription, WhisperClient, choose_final_transcript, human_speech_text, merge_live_transcript, pcm_to_wav, sentence_segments, speech_present
 from pulse.labels import DIMENSIONS, DISPLAY_NAMES
 from pulse.model import SentimentResult, SentimentScore
 from pulse.server import create_app
@@ -56,6 +56,11 @@ def test_live_transcript_retains_new_rolling_window_text_when_its_wording_change
     assert merge_live_transcript("Hello, thank you", "Hello thank you for helping") == "Hello thank you for helping"
     assert merge_live_transcript("Hello, thank you", "unrelated revision") == "Hello, thank you"
     assert merge_live_transcript("Hello, thank you", "the bank charged me") == "Hello, thank you the bank charged me"
+
+
+def test_final_transcript_prefers_the_accurate_full_decode_over_the_provisional_draft():
+    assert choose_final_transcript("Hello thank you the bank charged me twice", "Hello, thank you. The bank charged me twice.") == "Hello, thank you. The bank charged me twice."
+    assert choose_final_transcript("One two three four five six seven eight nine ten", "eight nine ten") == "One two three four five six seven eight nine ten"
 
 
 def test_transcription_recovery_discards_only_the_failed_utterance_and_keeps_listening():

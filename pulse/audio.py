@@ -71,6 +71,15 @@ def merge_live_transcript(previous: str, candidate: str) -> str:
     return previous
 
 
+def choose_final_transcript(previous: str, candidate: str) -> str:
+    """Prefer the accurate final decode when it covers the provisional draft, retaining a rolling draft only when the final audio window was truncated."""
+    if not previous:
+        return candidate
+    if len(candidate.split()) >= max(4, math.floor(len(previous.split()) * .65)):
+        return candidate
+    return merge_live_transcript(previous, candidate)
+
+
 def sentence_segments(value: str) -> tuple[str, ...]:
     text = " ".join(value.split())
     if not text:
@@ -308,7 +317,7 @@ class LiveSession:
             else:
                 return None
         elif request.final:
-            text = merge_live_transcript(request.prior_text, candidate) if request.prior_text else candidate
+            text = choose_final_transcript(request.prior_text, candidate)
         else:
             text = merge_live_transcript(request.prior_text, candidate)
         sentiment_supported = supports_sentiment(language)
