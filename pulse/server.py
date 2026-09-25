@@ -66,7 +66,7 @@ def create_app(classifier, transcriber) -> FastAPI:
                 try:
                     event = await session.tick(time.perf_counter() * 1000)
                 except Exception as exc:
-                    session.stop()
+                    session.discard_current_utterance()
                     await socket.send_json({"type": "error", "message": str(exc)})
                     continue
                 if event:

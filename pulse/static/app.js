@@ -18,6 +18,7 @@ const WAVE_SAMPLE_WINDOW = .025;
 const MAX_SESSION_WAVE_SAMPLES = 2400;
 const MAX_CURRENT_WAVE_SAMPLES = 420;
 const SPEECH_WAVE_THRESHOLD = .012;
+const WAVE_RENDER_THRESHOLD = .004;
 
 function setText(id, value) { document.querySelector(id).textContent = value; }
 function displayMs(value) { return `${Math.round(value)} ms`; }
@@ -109,9 +110,20 @@ function compactWave(wave, limit) {
   wave.splice(0, wave.length, ...compacted);
 }
 
+function compactSessionWave(wave, limit) {
+  if (wave.length <= limit) return;
+  const compacted = [];
+  for (let index = 0; index < wave.length; index += 2) {
+    const left = wave[index];
+    const right = wave[index + 1] || left;
+    compacted.push(left.amplitude >= right.amplitude ? left : right);
+  }
+  wave.splice(0, wave.length, ...compacted);
+}
+
 function appendWaveSample(amplitude) {
-  state.sessionWave.push(amplitude);
-  compactWave(state.sessionWave, MAX_SESSION_WAVE_SAMPLES);
+  state.sessionWave.push({ amplitude: amplitude >= SPEECH_WAVE_THRESHOLD ? amplitude : 0, color: state.accent });
+  compactSessionWave(state.sessionWave, MAX_SESSION_WAVE_SAMPLES);
   if (!state.currentWaveOpen && amplitude >= SPEECH_WAVE_THRESHOLD) {
     state.currentWave = [];
     state.currentWaveOpen = true;
@@ -142,7 +154,7 @@ function finishCurrentWave() {
   setText("#current-wave-state", "Awaiting speech");
 }
 
-function drawEnvelope(context, target, values, color, active) {
+function drawEnvelope(context, target, values, amplitudeOf, colorOf, active) {
   const width = target.clientWidth;
   const height = target.clientHeight;
   context.clearRect(0, 0, width, height);
@@ -154,12 +166,17 @@ function drawEnvelope(context, target, values, color, active) {
   for (let index = 0; index < bars; index += 1) {
     const start = Math.floor(index * values.length / bars);
     const end = Math.max(start + 1, Math.floor((index + 1) * values.length / bars));
-    let amplitude = 0;
-    for (let sample = start; sample < end; sample += 1) amplitude = Math.max(amplitude, values[sample]);
-    const barHeight = Math.max(2, Math.min(height * .92, amplitude * height * 8.5));
+    let peak = values[start];
+    let amplitude = amplitudeOf(peak);
+    for (let sample = start + 1; sample < end; sample += 1) {
+      const next = amplitudeOf(values[sample]);
+      if (next > amplitude) { peak = values[sample]; amplitude = next; }
+    }
+    if (amplitude < WAVE_RENDER_THRESHOLD) continue;
+    const barHeight = Math.max(3, Math.min(height * .92, amplitude * height * 9.5));
     const x = index * width / bars + 1;
-    context.fillStyle = color;
-    context.globalAlpha = active ? Math.max(.4, Math.min(.96, amplitude * 7)) : Math.max(.2, Math.min(.58, amplitude * 4));
+    context.fillStyle = colorOf(peak);
+    context.globalAlpha = active ? Math.max(.48, Math.min(.98, amplitude * 8)) : Math.max(.42, Math.min(.88, amplitude * 7));
     context.beginPath();
     context.roundRect(x, centre - barHeight / 2, Math.max(2, width / bars - 3), barHeight, 4);
     context.fill();
@@ -173,8 +190,8 @@ function drawWave() {
   drawing.clearRect(0, 0, width, height);
   drawing.fillStyle = "#141414";
   drawing.fillRect(0, 0, width, height);
-  drawEnvelope(drawing, canvas, state.sessionWave, "#98a0ac", Boolean(state.stream));
-  drawEnvelope(signalDrawing, signalCanvas, state.currentWave, state.accent, state.currentWaveOpen);
+  drawEnvelope(drawing, canvas, state.sessionWave, sample => sample.amplitude, sample => sample.color, Boolean(state.stream));
+  drawEnvelope(signalDrawing, signalCanvas, state.currentWave, sample => sample, () => state.accent, state.currentWaveOpen);
   state.raf = requestAnimationFrame(drawWave);
 }
 
@@ -283,8 +300,14 @@ async function start() {
       return;
     }
     if (message.type === "stopped") { setText("#connection", "Stopped · audio discarded"); return; }
-    if (message.type === "error") { setText("#connection", `Local error: ${message.message}`); return; }
+    if (message.type === "error") { setText("#connection", `Local error: ${message.message}`); setText("#wave-copy", "Recovering local speech recognition…"); return; }
     if (message.type === "partial" || message.type === "final") renderEvent(message);
+  };
+  state.ws.onclose = () => {
+    if (!state.stream) return;
+    closeMicrophone();
+    stopButton.disabled = true;
+    startButton.disabled = false;
   };
 }
 

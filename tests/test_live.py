@@ -57,6 +57,17 @@ def test_live_transcript_only_extends_when_rolling_windows_overlap_stably():
     assert merge_live_transcript("Hello, thank you", "unrelated revision") == "Hello, thank you"
 
 
+def test_transcription_recovery_discards_only_the_failed_utterance_and_keeps_listening():
+    session = LiveSession(FakeClassifier(), FakeTranscriber())
+    session.start()
+    session.push_pcm(pcm(2000), 0)
+    session.discard_current_utterance()
+    assert session.active is True
+    assert session.window == bytearray()
+    assert session.utterance == bytearray()
+    assert session.last_speech_ms is None
+
+
 def test_live_session_emits_every_partial_then_one_final_and_clears_pcm():
     async def run() -> None:
         session = LiveSession(FakeClassifier(), FakeTranscriber())

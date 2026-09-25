@@ -217,10 +217,13 @@ class LiveSession:
 
     def stop(self) -> None:
         """Immediately clear retained PCM and disable further transcription or inference."""
+        self.discard_current_utterance()
+        self.active = False
+
+    def discard_current_utterance(self) -> None:
         self.window.clear()
         self.utterance.clear()
-        self.active = False
-        self.last_audio_ms = self.last_speech_ms = None
+        self.last_tick_ms = self.last_audio_ms = self.last_speech_ms = None
         self.last_human_transcript = None
         self.last_human_language = None
 
