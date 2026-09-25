@@ -43,6 +43,7 @@ def human_speech_text(value: object) -> str:
 
 
 def merge_live_transcript(previous: str, candidate: str) -> str:
+    """Keep all likely later rolling-window text while allowing the more accurate final decode to replace provisional wording."""
     old_words, new_words = previous.split(), candidate.split()
     if not old_words:
         return candidate
@@ -52,9 +53,21 @@ def merge_live_transcript(previous: str, candidate: str) -> str:
         return candidate
     if old_keys[:len(new_keys)] == new_keys:
         return previous
-    for overlap in range(min(len(old_words), len(new_words)), 1, -1):
+    for overlap in range(min(len(old_words), len(new_words)), 0, -1):
         if old_keys[-overlap:] == new_keys[:overlap]:
             return " ".join([*old_words, *new_words[overlap:]])
+    best_length, best_old_start, best_new_start = 0, 0, 0
+    for old_start in range(max(0, len(old_keys) - 40), len(old_keys)):
+        for new_start in range(len(new_keys)):
+            length = 0
+            while old_start + length < len(old_keys) and new_start + length < len(new_keys) and old_keys[old_start + length] == new_keys[new_start + length]:
+                length += 1
+            if length > best_length:
+                best_length, best_old_start, best_new_start = length, old_start, new_start
+    if best_length >= 2:
+        return " ".join([*old_words[:best_old_start + best_length], *new_words[best_new_start + best_length:]])
+    if len(new_words) >= 3:
+        return " ".join([*old_words, *new_words])
     return previous
 
 
@@ -105,7 +118,7 @@ def pcm_to_wav(pcm: bytes) -> bytes:
     return output.getvalue()
 
 
-def speech_present(pcm: bytes, threshold: float = 350) -> bool:
+def speech_present(pcm: bytes, threshold: float = 180) -> bool:
     """Use a small local energy gate to avoid asking Whisper to decode pure silence."""
     if not pcm or len(pcm) % 2:
         return False

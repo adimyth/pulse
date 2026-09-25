@@ -51,10 +51,11 @@ def test_sentence_segments_preserve_complete_sentences_for_independent_coloring(
     assert sentence_segments("Hello. This charge is wrong! Please help") == ("Hello.", "This charge is wrong!", "Please help")
 
 
-def test_live_transcript_only_extends_when_rolling_windows_overlap_stably():
+def test_live_transcript_retains_new_rolling_window_text_when_its_wording_changes():
     assert merge_live_transcript("Hello, thank you", "thank you for helping") == "Hello, thank you for helping"
     assert merge_live_transcript("Hello, thank you", "Hello thank you for helping") == "Hello thank you for helping"
     assert merge_live_transcript("Hello, thank you", "unrelated revision") == "Hello, thank you"
+    assert merge_live_transcript("Hello, thank you", "the bank charged me") == "Hello, thank you the bank charged me"
 
 
 def test_transcription_recovery_discards_only_the_failed_utterance_and_keeps_listening():

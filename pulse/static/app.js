@@ -20,7 +20,7 @@ const nonSpeechCaptions = new Set(["blank audio", "silence", "howling wind", "wi
 const WAVE_SAMPLE_WINDOW = .025;
 const MAX_SESSION_WAVE_SAMPLES = 2400;
 const MAX_CURRENT_WAVE_SAMPLES = 420;
-const SPEECH_WAVE_THRESHOLD = .012;
+const SPEECH_WAVE_THRESHOLD = .005;
 const WAVE_RENDER_THRESHOLD = .004;
 
 function setText(id, value) { document.querySelector(id).textContent = value; }
