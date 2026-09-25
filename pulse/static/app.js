@@ -1,5 +1,7 @@
 const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, previousWords: [], raf: null, accent: "#7aa6ff" };
 const transcript = document.querySelector("#transcript");
+const transcriptHistory = document.querySelector("#transcript-history");
+const transcriptScroll = document.querySelector("#transcript-scroll");
 const meters = [...document.querySelectorAll(".meter")];
 const startButton = document.querySelector("#start");
 const stopButton = document.querySelector("#stop");
@@ -25,6 +27,20 @@ function renderTranscript(text, accent) {
   state.previousWords = words;
 }
 
+function archiveTranscript(text, accent) {
+  const entry = document.createElement("li");
+  const label = document.createElement("span");
+  const content = document.createElement("p");
+  label.textContent = "Final";
+  content.textContent = text;
+  content.style.setProperty("--accent", accent);
+  entry.append(label, content);
+  transcriptHistory.append(entry);
+  transcript.textContent = "Listening for the next thought…";
+  state.previousWords = [];
+  requestAnimationFrame(() => { transcriptScroll.scrollTop = transcriptScroll.scrollHeight; });
+}
+
 function renderSentiment(result) {
   const dominant = result.dominant || "Listening";
   state.accent = tones[dominant] || "#7aa6ff";
@@ -37,14 +53,16 @@ function renderSentiment(result) {
     meter.querySelector("b").style.width = `${Math.round(score.value * 100)}%`;
   });
   const pressure = Math.round(result.action_pressure * 100);
-  setText("#pressure", pressure ? `${pressure}% cue` : "none");
+  setText("#pressure", pressure ? `${pressure}% urgency cue` : "No urgency cue");
   document.querySelector("#pressure-bar").style.width = `${pressure}%`;
+  setText("#pressure-detail", pressure ? "Urgency wording is present in the current transcript." : "No urgency wording is present in the current transcript.");
   setText("#context-state", result.abstained ? "Listening for enough context…" : "Text signals update independently as the transcript changes.");
 }
 
 function renderEvent(event) {
   const accent = tones[event.sentiment.dominant] || "#7aa6ff";
-  renderTranscript(event.transcript, accent);
+  if (event.type === "final") archiveTranscript(event.transcript, accent);
+  else renderTranscript(event.transcript, accent);
   renderSentiment(event.sentiment);
   setText("#utterance-state", event.type === "final" ? "Final" : "Live");
   setText("#event-kind", event.type === "final" ? "Utterance finalized" : "Refreshing every 300 ms");

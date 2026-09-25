@@ -15,8 +15,11 @@
 
       <section class="stage">
         <article class="transcript-area">
-          <div class="section-label"><span>Live transcript</span><span id="utterance-state">Idle</span></div>
-          <p id="transcript" class="transcript" aria-live="polite">Press start and speak naturally.</p>
+          <div class="section-label"><span>Session transcript</span><span id="utterance-state">Idle</span></div>
+          <div id="transcript-scroll" class="transcript-scroll">
+            <ol id="transcript-history" class="transcript-history" aria-label="Completed utterances"></ol>
+            <p id="transcript" class="transcript" aria-live="polite">Press start and speak naturally.</p>
+          </div>
           <p id="context-state" class="context-state">Audio and inference stay on this Mac.</p>
           <div class="event-meta"><span id="event-kind">Awaiting speech</span><span id="latency">—</span></div>
         </article>
@@ -33,7 +36,11 @@
             <li class="meter low_mood"><div><span>Low mood</span><strong>—</strong></div><i><b></b></i></li>
             <li class="meter neutral"><div><span>Neutral</span><strong>—</strong></div><i><b></b></i></li>
           </ol>
-          <div class="pressure"><span>Action pressure</span><strong id="pressure">—</strong><i><b id="pressure-bar"></b></i></div>
+          <div class="pressure" aria-live="polite">
+            <div><span>Action pressure</span><strong id="pressure">Waiting for speech</strong></div>
+            <p id="pressure-detail">Shown separately from sentiment when the transcript contains urgency wording.</p>
+            <i><b id="pressure-bar"></b></i>
+          </div>
         </aside>
       </section>
 
