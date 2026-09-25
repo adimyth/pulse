@@ -14,6 +14,24 @@ case "${model}" in
   *) echo "Pulse Local supports medium.en, small.en, and base.en" >&2; exit 2 ;;
 esac
 
+ensure_model() {
+  local requested_model="$1"
+  local requested_sha256
+  case "${requested_model}" in
+    medium.en) requested_sha256="cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356" ;;
+    small.en) requested_sha256="c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d" ;;
+    base.en) requested_sha256="3e2eabc347eb339c98b417d1eae3c2fc701d0a9ee23c67ca15db49cfa2c16c86" ;;
+    *) return 2 ;;
+  esac
+  local requested_path="${runtime_root}/models/ggml-${requested_model}.bin"
+  if [[ -f "${requested_path}" ]] && [[ "$(shasum -a 256 "${requested_path}" | awk '{print $1}')" != "${requested_sha256}" ]]; then
+    mv "${requested_path}" "${requested_path}.invalid-$(shasum -a 256 "${requested_path}" | awk '{print $1}')"
+  fi
+  "${runtime_root}/models/download-ggml-model.sh" "${requested_model}" "${runtime_root}/models"
+  actual_model_sha256="$(shasum -a 256 "${requested_path}" | awk '{print $1}')"
+  [[ "${actual_model_sha256}" == "${requested_sha256}" ]] || { echo "model checksum mismatch for ${requested_model}" >&2; exit 1; }
+}
+
 cmake_bin="${CMAKE_BIN:-$(command -v cmake)}"
 if [[ -x /opt/homebrew/bin/cmake ]]; then cmake_bin="/opt/homebrew/bin/cmake"; fi
 command -v git >/dev/null || { echo "git is required" >&2; exit 1; }
@@ -25,15 +43,16 @@ git -C "${runtime_root}" checkout --detach "${revision}"
 arch -arm64 "${cmake_bin}" -S "${runtime_root}" -B "${runtime_root}/build-arm64" -DGGML_METAL=ON -DGGML_NATIVE=OFF -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_BUILD_TYPE=Release
 arch -arm64 "${cmake_bin}" --build "${runtime_root}/build-arm64" --target whisper-server --config Release -j
 
-model_path="${runtime_root}/models/ggml-${model}.bin"
-if [[ -f "${model_path}" ]] && [[ "$(shasum -a 256 "${model_path}" | awk '{print $1}')" != "${expected_model_sha256}" ]]; then
-  mv "${model_path}" "${model_path}.invalid-$(shasum -a 256 "${model_path}" | awk '{print $1}')"
+ensure_model "${model}"
+draft_model=""
+draft_model_sha256=""
+if [[ "${model}" == "medium.en" ]]; then
+  draft_model="small.en"
+  draft_model_sha256="c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d"
+  ensure_model "${draft_model}"
 fi
-"${runtime_root}/models/download-ggml-model.sh" "${model}" "${runtime_root}/models"
-actual_model_sha256="$(shasum -a 256 "${model_path}" | awk '{print $1}')"
-[[ "${actual_model_sha256}" == "${expected_model_sha256}" ]] || { echo "model checksum mismatch" >&2; exit 1; }
 
-python3 - "${runtime_root}" "${repository_url}" "${revision}" "${model}" "${expected_model_sha256}" <<'PY'
+python3 - "${runtime_root}" "${repository_url}" "${revision}" "${model}" "${expected_model_sha256}" "${draft_model}" "${draft_model_sha256}" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -49,6 +68,8 @@ manifest = {
     "model": sys.argv[4],
     "model_sha256": sys.argv[5],
 }
+if sys.argv[6]:
+    manifest["provisional_model"] = {"model": sys.argv[6], "model_sha256": sys.argv[7]}
 (root / "bootstrap-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 print(json.dumps(manifest, indent=2))
 PY

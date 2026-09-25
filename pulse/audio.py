@@ -203,8 +203,8 @@ def unavailable_sentiment(language: str | None, model_id: str = "pulse-local") -
 class LiveSession:
     """Maintain one short in-memory microphone window and emit every partial sentiment update to the dashboard."""
 
-    def __init__(self, classifier: PulseClassifier, transcriber: Transcriber, partial_interval_ms: int = PARTIAL_INTERVAL_MS, final_silence_ms: int = FINAL_SILENCE_MS, window_ms: int = WINDOW_MS, max_utterance_ms: int = MAX_UTTERANCE_MS) -> None:
-        self.classifier, self.transcriber = classifier, transcriber
+    def __init__(self, classifier: PulseClassifier, transcriber: Transcriber, final_transcriber: Transcriber | None = None, partial_interval_ms: int = PARTIAL_INTERVAL_MS, final_silence_ms: int = FINAL_SILENCE_MS, window_ms: int = WINDOW_MS, max_utterance_ms: int = MAX_UTTERANCE_MS) -> None:
+        self.classifier, self.transcriber, self.final_transcriber = classifier, transcriber, final_transcriber or transcriber
         self.partial_interval_ms, self.final_silence_ms = partial_interval_ms, final_silence_ms
         self.max_window_bytes = int(SAMPLE_RATE * window_ms / 1000) * 2
         self.max_utterance_bytes = int(SAMPLE_RATE * max_utterance_ms / 1000) * 2
@@ -277,8 +277,9 @@ class LiveSession:
         return TranscriptionRequest(audio=bytes(self.utterance), final=True, requested_at_ms=now_ms, utterance_bytes=len(self.utterance), prior_text=self.last_human_transcript or "", prior_language=self.last_human_language)
 
     async def transcribe_request(self, request: TranscriptionRequest) -> Transcription:
-        """Decode a detached request while new browser PCM continues entering the session buffers."""
-        return await self.transcriber.transcribe(pcm_to_wav(request.audio))
+        """Decode a detached request while new browser PCM continues entering the session buffers, reserving the accurate model for final text."""
+        transcriber = self.final_transcriber if request.final else self.transcriber
+        return await transcriber.transcribe(pcm_to_wav(request.audio))
 
     def complete_request(self, request: TranscriptionRequest, transcript: Transcription) -> dict[str, Any] | None:
         """Merge one completed decode, preserve later-arriving audio, and emit one ordered dashboard event."""

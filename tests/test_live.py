@@ -135,6 +135,27 @@ def test_final_flush_preserves_audio_arriving_during_its_background_decode():
     asyncio.run(run())
 
 
+def test_live_session_uses_fast_transcriber_for_partials_and_accurate_transcriber_for_final_text():
+    class NamedTranscriber:
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+        async def transcribe(self, wav: bytes) -> Transcription:
+            return Transcription(self.text, 1.0, "english")
+
+    async def run() -> None:
+        session = LiveSession(FakeClassifier(), NamedTranscriber("fast draft"), NamedTranscriber("accurate final"))
+        session.start()
+        session.push_pcm(pcm(2000), 0)
+        assert await session.tick(0) is None
+        assert (await session.tick(300))["transcript"] == "fast draft"
+        final_request = session.force_final_request(700)
+        assert final_request is not None
+        assert (await session.transcribe_request(final_request)).text == "accurate final"
+
+    asyncio.run(run())
+
+
 def test_dashboard_websocket_contract_is_local_and_testable():
     from fastapi.testclient import TestClient
 

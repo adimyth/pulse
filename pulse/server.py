@@ -20,7 +20,7 @@ from .model import PulseClassifier
 STATIC_DIR = Path(__file__).parent / "static"
 
 
-def create_app(classifier, transcriber) -> FastAPI:
+def create_app(classifier, transcriber, final_transcriber=None) -> FastAPI:
     """Create a testable loopback dashboard application without a cloud route or a microphone requirement."""
     app = FastAPI(title="Pulse Local", version="0.1")
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -36,7 +36,7 @@ def create_app(classifier, transcriber) -> FastAPI:
     @app.websocket("/ws/live")
     async def live(socket: WebSocket) -> None:
         await socket.accept()
-        session = LiveSession(classifier, transcriber)
+        session = LiveSession(classifier, transcriber, final_transcriber)
         pending: tuple[object, asyncio.Task] | None = None
         stopping = False
         await socket.send_json({"type": "ready", "sample_rate": 16_000, "refresh_ms": 300, "final_silence_ms": 700, "local_only": True})
@@ -118,6 +118,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--whisper-binary", type=Path, default=Path("var/whisper.cpp/build-arm64/bin/whisper-server"))
     parser.add_argument("--whisper-model", type=Path, default=Path("var/whisper.cpp/models/ggml-medium.en.bin"))
     parser.add_argument("--whisper-port", type=int, default=8178)
+    parser.add_argument("--partial-whisper-model", type=Path, default=Path("var/whisper.cpp/models/ggml-small.en.bin"))
+    parser.add_argument("--partial-whisper-port", type=int, default=8179)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8050)
     parser.add_argument("--device")
@@ -133,15 +135,21 @@ def main() -> None:
         raise SystemExit("Pulse Local refuses a non-loopback dashboard host")
     classifier = PulseClassifier(args.artifacts, args.device)
     classifier.warmup()
-    whisper = WhisperProcess(args.whisper_binary, args.whisper_model, port=args.whisper_port)
-    whisper.start()
+    final_whisper = WhisperProcess(args.whisper_binary, args.whisper_model, port=args.whisper_port)
+    partial_whisper = WhisperProcess(args.whisper_binary, args.partial_whisper_model, port=args.partial_whisper_port)
+    final_whisper.start()
+    partial_whisper.start()
     try:
         asyncio.run(wait_for_whisper(f"http://127.0.0.1:{args.whisper_port}"))
-        transcriber = WhisperClient(f"http://127.0.0.1:{args.whisper_port}", language="en")
-        asyncio.run(transcriber.transcribe(pcm_to_wav(b"\0" * SAMPLE_RATE * 2)))
-        uvicorn.run(create_app(classifier, transcriber), host=args.host, port=args.port, workers=1)
+        asyncio.run(wait_for_whisper(f"http://127.0.0.1:{args.partial_whisper_port}"))
+        final_transcriber = WhisperClient(f"http://127.0.0.1:{args.whisper_port}", language="en")
+        partial_transcriber = WhisperClient(f"http://127.0.0.1:{args.partial_whisper_port}", language="en")
+        asyncio.run(final_transcriber.transcribe(pcm_to_wav(b"\0" * SAMPLE_RATE * 2)))
+        asyncio.run(partial_transcriber.transcribe(pcm_to_wav(b"\0" * SAMPLE_RATE * 2)))
+        uvicorn.run(create_app(classifier, partial_transcriber, final_transcriber), host=args.host, port=args.port, workers=1)
     finally:
-        whisper.stop()
+        partial_whisper.stop()
+        final_whisper.stop()
 
 
 if __name__ == "__main__":
