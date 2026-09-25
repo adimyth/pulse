@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import re
 import struct
 import time
 import wave
@@ -22,12 +23,20 @@ SAMPLE_RATE = 16_000
 PARTIAL_INTERVAL_MS = 300
 FINAL_SILENCE_MS = 700
 WINDOW_MS = 3_000
+NON_SPEECH_CAPTIONS = frozenset({"blank audio", "silence", "howling wind", "wind", "wind blowing", "crowd cheer", "crowd cheering", "cheering", "applause", "engine revving", "engine reving", "keyboard clicking", "typing", "background noise", "music", "laughter"})
 
 
 def loopback_url(url: str) -> bool:
     """Accept only a local HTTP endpoint, including for internal health checks and transcriptions."""
     parsed = urlsplit(url)
     return parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+
+
+def human_speech_text(value: object) -> str:
+    """Discard pure sound captions from Whisper while preserving genuine spoken text unchanged."""
+    text = " ".join(str(value).split())
+    caption = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+    return "" if caption in NON_SPEECH_CAPTIONS else text
 
 
 @dataclass(frozen=True)
@@ -86,9 +95,7 @@ class WhisperClient:
             body = response.json()
         except json.JSONDecodeError as exc:
             raise RuntimeError("local Whisper server returned invalid JSON") from exc
-        text = str(body.get("text", "")).strip()
-        if text.upper() in {"[BLANK_AUDIO]", "[BLANK AUDIO]"}:
-            text = ""
+        text = human_speech_text(body.get("text", ""))
         return Transcription(text=text, latency_ms=(time.perf_counter() - started) * 1000)
 
 
@@ -154,18 +161,21 @@ class LiveSession:
         self.last_tick_ms: float | None = None
         self.last_audio_ms: float | None = None
         self.last_speech_ms: float | None = None
+        self.last_human_transcript: str | None = None
 
     def start(self) -> None:
         """Start a fresh capture, explicitly clearing any preceding in-memory audio and utterance state."""
         self.window.clear()
         self.active, self.sequence = True, 0
         self.last_tick_ms = self.last_audio_ms = self.last_speech_ms = None
+        self.last_human_transcript = None
 
     def stop(self) -> None:
         """Immediately clear retained PCM and disable further transcription or inference."""
         self.window.clear()
         self.active = False
         self.last_audio_ms = self.last_speech_ms = None
+        self.last_human_transcript = None
 
     def push_pcm(self, pcm: bytes, now_ms: float) -> None:
         """Receive aligned browser PCM while retaining no more than the short rolling local window."""
@@ -194,7 +204,14 @@ class LiveSession:
         transcript = await self.transcriber.transcribe(pcm_to_wav(bytes(self.window)))
         text = " ".join(transcript.text.split())
         if not text:
-            return None
+            if final and self.last_human_transcript:
+                text = self.last_human_transcript
+            elif final:
+                self.window.clear()
+                self.last_speech_ms = self.last_audio_ms = None
+                return None
+            else:
+                return None
         sentiment = self.classifier.classify(text)
         self.sequence += 1
         completed = time.perf_counter() * 1000
@@ -202,4 +219,7 @@ class LiveSession:
         if final:
             self.window.clear()
             self.last_speech_ms = self.last_audio_ms = None
+            self.last_human_transcript = None
+        else:
+            self.last_human_transcript = text
         return event

@@ -1,4 +1,4 @@
-const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, previousWords: [], raf: null, accent: "#7aa6ff" };
+const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, liveText: "", raf: null, accent: "#7aa6ff", signalStrength: .12 };
 const transcript = document.querySelector("#transcript");
 const transcriptHistory = document.querySelector("#transcript-history");
 const transcriptScroll = document.querySelector("#transcript-scroll");
@@ -8,23 +8,17 @@ const stopButton = document.querySelector("#stop");
 const connection = document.querySelector("#connection");
 const canvas = document.querySelector("#waveform");
 const drawing = canvas.getContext("2d");
+const signalCanvas = document.querySelector("#signal-wave");
+const signalDrawing = signalCanvas.getContext("2d");
 const tones = { frustration: "#ef5c5f", positive: "#e5c23e", surprise: "#bc8def", uncertainty: "#7aa6ff", low_mood: "#758290", neutral: "#b5bbc5" };
 
 function setText(id, value) { document.querySelector(id).textContent = value; }
 function displayMs(value) { return `${Math.round(value)} ms`; }
 
 function renderTranscript(text, accent) {
-  const words = text.split(/\s+/).filter(Boolean);
-  let common = 0;
-  while (common < words.length && common < state.previousWords.length && words[common].toLowerCase() === state.previousWords[common].toLowerCase()) common += 1;
-  transcript.replaceChildren(...words.flatMap((word, index) => {
-    const part = document.createElement("span");
-    part.className = index < common ? "stable" : "fresh";
-    part.style.setProperty("--accent", accent);
-    part.textContent = word;
-    return index === words.length - 1 ? [part] : [part, document.createTextNode(" ")];
-  }));
-  state.previousWords = words;
+  if (text !== state.liveText) transcript.textContent = text;
+  transcript.style.color = accent;
+  state.liveText = text;
 }
 
 function archiveTranscript(text, accent) {
@@ -33,19 +27,20 @@ function archiveTranscript(text, accent) {
   const content = document.createElement("p");
   label.textContent = "Final";
   content.textContent = text;
-  content.style.setProperty("--accent", accent);
+  content.style.color = accent;
   entry.append(label, content);
   transcriptHistory.append(entry);
   transcript.textContent = "Listening for the next thought…";
-  state.previousWords = [];
+  transcript.style.color = "#707070";
+  state.liveText = "";
   requestAnimationFrame(() => { transcriptScroll.scrollTop = transcriptScroll.scrollHeight; });
 }
 
 function renderSentiment(result) {
   const dominant = result.dominant || "Listening";
   state.accent = tones[dominant] || "#7aa6ff";
+  state.signalStrength = Math.max(.1, ...result.scores.filter(score => score.key !== "neutral").map(score => score.value));
   document.documentElement.style.setProperty("--accent", state.accent);
-  document.querySelector("#orb").style.filter = `drop-shadow(0 0 24px ${state.accent}66)`;
   setText("#dominant", dominant === "Listening" ? dominant : dominant.replace("_", " "));
   result.scores.forEach((score, index) => {
     const meter = meters[index];
@@ -71,14 +66,40 @@ function renderEvent(event) {
   setText("#classifier", `Text model ${displayMs(event.timings_ms.classifier)}`);
 }
 
-function resizeCanvas() {
+function resizeOneCanvas(target, context) {
   const pixelRatio = window.devicePixelRatio || 1;
-  canvas.width = canvas.clientWidth * pixelRatio;
-  canvas.height = canvas.clientHeight * pixelRatio;
-  drawing.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  target.width = target.clientWidth * pixelRatio;
+  target.height = target.clientHeight * pixelRatio;
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
 }
 
-function drawWave() {
+function resizeCanvas() {
+  resizeOneCanvas(canvas, drawing);
+  resizeOneCanvas(signalCanvas, signalDrawing);
+}
+
+function drawSignalWave(time) {
+  const width = signalCanvas.clientWidth;
+  const height = signalCanvas.clientHeight;
+  signalDrawing.clearRect(0, 0, width, height);
+  const bars = 42;
+  const centre = height / 2;
+  for (let index = 0; index < bars; index += 1) {
+    const phase = time / 650 + index * .52;
+    const envelope = Math.sin(index / (bars - 1) * Math.PI);
+    const movement = .42 + .58 * Math.abs(Math.sin(phase));
+    const barHeight = Math.max(4, envelope * movement * state.signalStrength * height * .92);
+    const x = index * width / bars + 1;
+    signalDrawing.fillStyle = state.accent;
+    signalDrawing.globalAlpha = .22 + envelope * .75;
+    signalDrawing.beginPath();
+    signalDrawing.roundRect(x, centre - barHeight / 2, Math.max(3, width / bars - 4), barHeight, 4);
+    signalDrawing.fill();
+  }
+  signalDrawing.globalAlpha = 1;
+}
+
+function drawWave(time) {
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
   drawing.clearRect(0, 0, width, height);
@@ -103,6 +124,7 @@ function drawWave() {
     drawing.fill();
   }
   drawing.globalAlpha = 1;
+  drawSignalWave(time);
   state.raf = requestAnimationFrame(drawWave);
 }
 

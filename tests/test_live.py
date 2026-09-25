@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from pulse.audio import LiveSession, Transcription, WhisperClient, pcm_to_wav, speech_present
+from pulse.audio import LiveSession, Transcription, WhisperClient, human_speech_text, pcm_to_wav, speech_present
 from pulse.labels import DIMENSIONS, DISPLAY_NAMES
 from pulse.model import SentimentResult, SentimentScore
 from pulse.server import create_app
@@ -33,6 +33,15 @@ def test_pcm_stays_in_memory_and_loopback_client_rejects_external_hosts():
     assert speech_present(pcm(2000)) is True
     with pytest.raises(ValueError):
         WhisperClient("https://example.com")
+
+
+def test_pure_sound_captions_do_not_become_transcript_entries():
+    assert human_speech_text("[BLANK_AUDIO]") == ""
+    assert human_speech_text("Howling wind.") == ""
+    assert human_speech_text("crowd cheer") == ""
+    assert human_speech_text("engine revving") == ""
+    assert human_speech_text("keyboard clicking") == ""
+    assert human_speech_text("I need help with this charge") == "I need help with this charge"
 
 
 def test_live_session_emits_every_partial_then_one_final_and_clears_pcm():
