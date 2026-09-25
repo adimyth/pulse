@@ -84,7 +84,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Pulse Local speech-to-sentiment dashboard.")
     parser.add_argument("--artifacts", type=Path, default=Path("var/pulse-model"))
     parser.add_argument("--whisper-binary", type=Path, default=Path("var/whisper.cpp/build-arm64/bin/whisper-server"))
-    parser.add_argument("--whisper-model", type=Path, default=Path("var/whisper.cpp/models/ggml-small.en.bin"))
+    parser.add_argument("--whisper-model", type=Path, default=Path("var/whisper.cpp/models/ggml-medium.en.bin"))
     parser.add_argument("--whisper-port", type=int, default=8178)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8050)

@@ -17,10 +17,13 @@ run_gate() {
   uv run python "${repo_root}/scripts/bench_fixture.py" "${fixture}" --whisper-model "${repo_root}/var/whisper.cpp/models/ggml-${model}.bin" "$@"
 }
 
-if run_gate "small.en" "$@"; then
+if run_gate "medium.en" "$@"; then
+  selected="medium.en"
+elif run_gate "small.en" "$@"; then
+  echo "medium.en did not pass the local gate; using small.en" >&2
   selected="small.en"
 else
-  echo "small.en did not pass the local gate; trying base.en" >&2
+  echo "medium.en and small.en did not pass the local gate; trying base.en" >&2
   run_gate "base.en" "$@"
   selected="base.en"
 fi

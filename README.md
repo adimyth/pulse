@@ -10,7 +10,7 @@ The model reports independent scores for Frustration, Positive, Surprise, Uncert
 
 ## Local architecture
 
-`whisper.cpp` provides locally preloaded, Metal-accelerated English speech-to-text through the `small.en` model. A compact fine-tuned `all-MiniLM-L6-v2` multi-label classifier scores refreshed transcripts on the local CPU, leaving Metal available to Whisper and avoiding contention in the live loop. The browser sends PCM only over a loopback WebSocket, and the backend sends each rolling-window WAV only to its own loopback Whisper server. Audio stays in memory and is discarded when recording stops.
+`whisper.cpp` provides locally preloaded, Metal-accelerated English speech-to-text through the pinned `medium.en` model. A compact fine-tuned `all-MiniLM-L6-v2` multi-label classifier scores refreshed transcripts on the local CPU, leaving Metal available to Whisper and avoiding contention in the live loop. The browser sends PCM only over a loopback WebSocket, and the backend sends each rolling-window WAV only to its own loopback Whisper server. Audio stays in memory and is discarded when recording stops.
 
 The project does not invoke Compass’s Qwen decision server in the 300 ms live loop. That model would add avoidable latency. This project keeps the useful Compass discipline—local inference, calibrated typed outputs, provenance, and abstention—while using a dedicated lightweight model for live interaction.
 
@@ -23,7 +23,7 @@ scripts/validate_fixture.sh /absolute/path/to/video.mp4
 scripts/run.sh
 ```
 
-Open `http://127.0.0.1:8050`, start the microphone, and speak naturally in English. The fixture command prefers `small.en` and retries `base.en` only when the preferred model misses the transcript or timing gate.
+Open `http://127.0.0.1:8050`, start the microphone, and speak naturally in English. The fixture command prefers `medium.en`, then retries `small.en` and `base.en` only when the prior model misses the transcript or timing gate.
 
 ## Data and limitations
 
