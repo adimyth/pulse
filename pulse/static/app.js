@@ -1,4 +1,4 @@
-const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, audioFrames: 0, inputWarningTimer: null, liveText: "", history: [], raf: null, accent: "#7aa6ff", signalStrength: .12, sessionWave: [], waveFramePeak: 0, waveFrameSamples: 0 };
+const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, audioFrames: 0, inputWarningTimer: null, liveText: "", liveSegments: [], history: [], raf: null, accent: "#7aa6ff", signalStrength: .12, sessionWave: [], waveFramePeak: 0, waveFrameSamples: 0 };
 const transcript = document.querySelector("#transcript");
 const transcriptHistory = document.querySelector("#transcript-history");
 const transcriptScroll = document.querySelector("#transcript-scroll");
@@ -30,18 +30,18 @@ function sentenceAccent(sentence, supported) {
 
 function renderLiveTranscript(event) {
   if (event.transcript === state.liveText) return;
-  const sentences = event.sentences?.length ? event.sentences : [{ text: event.transcript, sentiment: event.sentiment }];
-  transcript.replaceChildren();
-  let appended = false;
-  for (const sentence of sentences) {
-    if (!isHumanTranscript(sentence.text)) continue;
+  const sentences = (event.sentences?.length ? event.sentences : [{ text: event.transcript, sentiment: event.sentiment }]).filter(sentence => isHumanTranscript(sentence.text));
+  let retained = 0;
+  while (retained < sentences.length && retained < state.liveSegments.length && sentences[retained].text === state.liveSegments[retained].text && sentences[retained].sentiment.dominant === state.liveSegments[retained].sentiment.dominant) retained += 1;
+  if (!state.liveSegments.length) transcript.replaceChildren();
+  while (transcript.children.length > retained) transcript.lastElementChild.remove();
+  for (const sentence of sentences.slice(retained)) {
     const fragment = document.createElement("span");
     fragment.textContent = sentence.text;
     fragment.style.color = sentenceAccent(sentence, event.sentiment_supported);
-    if (appended) transcript.append(" ");
     transcript.append(fragment);
-    appended = true;
   }
+  state.liveSegments = sentences;
   state.liveText = event.transcript;
 }
 
@@ -56,7 +56,6 @@ function archiveTranscript(event) {
     const fragment = document.createElement("span");
     fragment.textContent = sentence.text;
     fragment.style.color = color;
-    if (appended) content.append(" ");
     content.append(fragment);
     state.history.push({ text: sentence.text, color });
     appended = true;
@@ -68,6 +67,7 @@ function archiveTranscript(event) {
   transcript.replaceChildren();
   transcript.style.color = "#707070";
   state.liveText = "";
+  state.liveSegments = [];
   requestAnimationFrame(() => { stage.scrollTop = stage.scrollHeight; });
 }
 
@@ -241,6 +241,7 @@ function resetDisplay() {
   transcriptHistory.replaceChildren();
   state.history = [];
   state.liveText = "";
+  state.liveSegments = [];
   state.accent = "#7aa6ff";
   state.signalStrength = .12;
   state.sessionWave = [];

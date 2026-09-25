@@ -20,6 +20,7 @@ button { font: inherit; }
 .transcript-history li { max-width: 900px; margin: 0 0 16px; }
 .transcript-history p { margin: 0; color: #c9c8c3; font-size: clamp(1rem, 1.3vw, 1.28rem); line-height: 1.58; }
 .transcript { max-width: 900px; margin: 0; min-height: 76px; font-size: clamp(1.35rem, 2.2vw, 2.35rem); line-height: 1.25; letter-spacing: -.035em; color: #707070; transition: color .2s ease; }
+.transcript > span:not(:last-child)::after, .transcript-history span:not(:last-child)::after { content: " "; white-space: pre; }
 .signal-area { padding: 26px 30px 25px; display: flex; flex-direction: column; background: #121212; }
 .signal-heading { display: flex; justify-content: space-between; font-size: .85rem; font-weight: 700; }
 .signal-heading span { color: #8c8c8c; text-transform: uppercase; letter-spacing: .11em; font-size: .65rem; }
