@@ -27,6 +27,7 @@ WINDOW_MS = 3_000
 MAX_UTTERANCE_MS = 45_000
 NON_SPEECH_CAPTIONS = frozenset({"blank audio", "silence", "howling wind", "wind", "wind blowing", "crowd cheer", "crowd cheering", "cheering", "applause", "engine revving", "engine reving", "keyboard clicking", "typing", "background noise", "music", "laughter", "non english speech", "speaking in foreign language", "foreign language"})
 SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])(?:[\"'”’\)\]])*\s+(?=[A-Z0-9])")
+COMPLETE_SENTENCE = re.compile(r"[^.!?]+[.!?](?:[\"'”’\)\]])*(?=\s|$)")
 
 
 def loopback_url(url: str) -> bool:
@@ -85,6 +86,24 @@ def sentence_segments(value: str) -> tuple[str, ...]:
     if not text:
         return ()
     return tuple(segment for segment in SENTENCE_BOUNDARY.split(text) if segment)
+
+
+def live_sentence_segments(value: str) -> tuple[tuple[str, bool], ...]:
+    """Return stable finished sentences and at most one still-changing trailing clause for live coloring."""
+    text = " ".join(value.split())
+    if not text:
+        return ()
+    segments: list[tuple[str, bool]] = []
+    end = 0
+    for match in COMPLETE_SENTENCE.finditer(text):
+        segment = match.group().strip()
+        if segment:
+            segments.append((segment, True))
+        end = match.end()
+    tail = text[end:].strip()
+    if tail:
+        segments.append((tail, False))
+    return tuple(segments)
 
 
 @dataclass(frozen=True)
@@ -329,9 +348,16 @@ class LiveSession:
             sentiment = segment_sentiment
             classifier_latency = round(sum(item["sentiment"]["latency_ms"] for item in sentences), 3)
         else:
-            sentiment = self.classifier.classify(text) if sentiment_supported else unavailable_sentiment(language, getattr(self.classifier, "model_id", "pulse-local"))
             sentences = []
-            classifier_latency = sentiment.latency_ms
+            segment_results: list[SentimentResult] = []
+            for segment, complete in live_sentence_segments(text):
+                segment_sentiment = self.classifier.classify(segment) if sentiment_supported else unavailable_sentiment(language, getattr(self.classifier, "model_id", "pulse-local"))
+                segment_results.append(segment_sentiment)
+                sentences.append({"text": segment, "sentiment": segment_sentiment.to_dict(), "complete": complete})
+            if not sentences:
+                return None
+            sentiment = segment_results[-1]
+            classifier_latency = round(sum(item["sentiment"]["latency_ms"] for item in sentences), 3)
         self.sequence += 1
         completed = time.perf_counter() * 1000
         event = {"type": "final" if request.final else "partial", "sequence": self.sequence, "transcript": text, "sentences": sentences, "language": language, "sentiment_supported": sentiment_supported, "sentiment": sentiment.to_dict(), "timings_ms": {"stt": round(transcript.latency_ms, 3), "classifier": classifier_latency, "audio_to_ui": round(completed - (self.last_audio_ms or completed), 3)}}

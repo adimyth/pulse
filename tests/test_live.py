@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from pulse.audio import LiveSession, Transcription, WhisperClient, choose_final_transcript, human_speech_text, merge_live_transcript, pcm_to_wav, sentence_segments, speech_present
+from pulse.audio import LiveSession, Transcription, WhisperClient, choose_final_transcript, human_speech_text, live_sentence_segments, merge_live_transcript, pcm_to_wav, sentence_segments, speech_present
 from pulse.labels import DIMENSIONS, DISPLAY_NAMES
 from pulse.model import SentimentResult, SentimentScore
 from pulse.server import create_app
@@ -51,6 +51,30 @@ def test_sentence_segments_preserve_complete_sentences_for_independent_coloring(
     assert sentence_segments("Hello. This charge is wrong! Please help") == ("Hello.", "This charge is wrong!", "Please help")
 
 
+def test_live_sentence_segments_mark_only_the_unfinished_tail_as_provisional():
+    assert live_sentence_segments("Hello. This charge is wrong! Please help") == (("Hello.", True), ("This charge is wrong!", True), ("Please help", False))
+
+
+def test_partial_events_classify_each_completed_sentence_before_the_utterance_ends():
+    class SentenceClassifier(FakeClassifier):
+        def classify(self, text: str) -> SentimentResult:
+            result = super().classify(text)
+            return SentimentResult(scores=result.scores, action_pressure=0.0, dominant="positive" if "thank" in text.lower() else "frustration", abstained=False, latency_ms=3.0)
+
+    session = LiveSession(SentenceClassifier(), FakeTranscriber())
+    session.start()
+    session.push_pcm(pcm(2000), 0)
+    request = session.next_request(0)
+    assert request is None
+    request = session.next_request(300)
+    assert request is not None
+    event = session.complete_request(request, Transcription("Thank you. This charge is wrong", 11.0, "english"))
+    assert event is not None
+    assert [sentence["text"] for sentence in event["sentences"]] == ["Thank you.", "This charge is wrong"]
+    assert [sentence["sentiment"]["dominant"] for sentence in event["sentences"]] == ["positive", "frustration"]
+    assert [sentence["complete"] for sentence in event["sentences"]] == [True, False]
+
+
 def test_live_transcript_retains_new_rolling_window_text_when_its_wording_changes():
     assert merge_live_transcript("Hello, thank you", "thank you for helping") == "Hello, thank you for helping"
     assert merge_live_transcript("Hello, thank you", "Hello thank you for helping") == "Hello thank you for helping"
@@ -82,6 +106,7 @@ def test_live_session_emits_every_partial_then_one_final_and_clears_pcm():
         assert await session.tick(0) is None
         first = await session.tick(300)
         assert first["type"] == "partial"
+        assert first["sentences"] == [{"text": "I am happy but this is frustrating", "sentiment": first["sentiment"], "complete": False}]
         session.push_pcm(pcm(2000), 350)
         second = await session.tick(600)
         assert second["type"] == "partial"

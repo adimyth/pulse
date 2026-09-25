@@ -1,4 +1,4 @@
-const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, audioFrames: 0, inputWarningTimer: null, liveText: "", history: [], raf: null, accent: "#7aa6ff", signalStrength: .12, currentWave: [], sessionWave: [], waveFramePeak: 0, waveFrameSamples: 0, currentWaveOpen: false };
+const state = { ws: null, stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, audioFrames: 0, inputWarningTimer: null, liveText: "", history: [], raf: null, accent: "#7aa6ff", signalStrength: .12, sessionWave: [], waveFramePeak: 0, waveFrameSamples: 0 };
 const transcript = document.querySelector("#transcript");
 const transcriptHistory = document.querySelector("#transcript-history");
 const transcriptScroll = document.querySelector("#transcript-scroll");
@@ -11,31 +11,38 @@ const exportButton = document.querySelector("#export");
 const connection = document.querySelector("#connection");
 const canvas = document.querySelector("#waveform");
 const drawing = canvas.getContext("2d");
-const signalCanvas = document.querySelector("#signal-wave");
-const signalDrawing = signalCanvas.getContext("2d");
 const pressureBlock = document.querySelector(".pressure");
-const signalArea = document.querySelector(".signal-area");
 const tones = { frustration: "#ef5c5f", positive: "#e5c23e", surprise: "#bc8def", uncertainty: "#7aa6ff", low_mood: "#758290", neutral: "#b5bbc5" };
 const nonSpeechCaptions = new Set(["blank audio", "silence", "howling wind", "wind", "wind blowing", "crowd cheer", "crowd cheering", "cheering", "applause", "engine revving", "engine reving", "keyboard clicking", "typing", "background noise", "music", "laughter", "non english speech", "speaking in foreign language", "foreign language"]);
 const WAVE_SAMPLE_WINDOW = .025;
 const MAX_SESSION_WAVE_SAMPLES = 2400;
-const MAX_CURRENT_WAVE_SAMPLES = 420;
-const SPEECH_WAVE_THRESHOLD = .005;
-const WAVE_RENDER_THRESHOLD = .004;
+const SPEECH_WAVE_THRESHOLD = .003;
+const WAVE_RENDER_THRESHOLD = .001;
 
 function setText(id, value) { document.querySelector(id).textContent = value; }
 function displayMs(value) { return `${Math.round(value)} ms`; }
 function displayName(value) { return value ? value.replaceAll("_", " ").replace(/\b\w/g, character => character.toUpperCase()) : "Listening"; }
 function isHumanTranscript(text) { return Boolean(text?.trim()) && !nonSpeechCaptions.has(text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()); }
 
-function renderTranscript(text, accent) {
-  if (text !== state.liveText) transcript.textContent = text;
-  transcript.style.color = accent;
-  state.liveText = text;
-}
-
 function sentenceAccent(sentence, supported) {
   return supported ? tones[sentence.sentiment.dominant] || "#b5bbc5" : "#9baecf";
+}
+
+function renderLiveTranscript(event) {
+  if (event.transcript === state.liveText) return;
+  const sentences = event.sentences?.length ? event.sentences : [{ text: event.transcript, sentiment: event.sentiment }];
+  transcript.replaceChildren();
+  let appended = false;
+  for (const sentence of sentences) {
+    if (!isHumanTranscript(sentence.text)) continue;
+    const fragment = document.createElement("span");
+    fragment.textContent = sentence.text;
+    fragment.style.color = sentenceAccent(sentence, event.sentiment_supported);
+    if (appended) transcript.append(" ");
+    transcript.append(fragment);
+    appended = true;
+  }
+  state.liveText = event.transcript;
 }
 
 function archiveTranscript(event) {
@@ -58,7 +65,7 @@ function archiveTranscript(event) {
   entry.append(content);
   transcriptHistory.append(entry);
   exportButton.disabled = false;
-  transcript.textContent = "Listening for the next thought…";
+  transcript.replaceChildren();
   transcript.style.color = "#707070";
   state.liveText = "";
   requestAnimationFrame(() => { stage.scrollTop = stage.scrollHeight; });
@@ -84,12 +91,10 @@ function renderSentiment(result) {
 
 function renderEvent(event) {
   if (!isHumanTranscript(event.transcript)) return;
-  const accent = event.sentiment_supported ? tones[event.sentiment.dominant] || "#7aa6ff" : "#9baecf";
   if (event.type === "final") {
     archiveTranscript(event);
-    finishCurrentWave();
   }
-  else renderTranscript(event.transcript, accent);
+  else renderLiveTranscript(event);
   renderSentiment(event.sentiment);
   setText("#stt", `STT ${displayMs(event.timings_ms.stt)}`);
   setText("#classifier", `Text model ${displayMs(event.timings_ms.classifier)}`);
@@ -104,14 +109,6 @@ function resizeOneCanvas(target, context) {
 
 function resizeCanvas() {
   resizeOneCanvas(canvas, drawing);
-  resizeOneCanvas(signalCanvas, signalDrawing);
-}
-
-function compactWave(wave, limit) {
-  if (wave.length <= limit) return;
-  const compacted = [];
-  for (let index = 0; index < wave.length; index += 2) compacted.push(Math.max(wave[index], wave[index + 1] || 0));
-  wave.splice(0, wave.length, ...compacted);
 }
 
 function compactSessionWave(wave, limit) {
@@ -128,17 +125,6 @@ function compactSessionWave(wave, limit) {
 function appendWaveSample(amplitude) {
   state.sessionWave.push({ amplitude: amplitude >= SPEECH_WAVE_THRESHOLD ? amplitude : 0, color: state.accent });
   compactSessionWave(state.sessionWave, MAX_SESSION_WAVE_SAMPLES);
-  if (!state.currentWaveOpen && amplitude >= SPEECH_WAVE_THRESHOLD) {
-    state.currentWave = [];
-    state.currentWaveOpen = true;
-    signalArea.dataset.speaking = "true";
-    resizeCanvas();
-    setText("#current-wave-state", "Speaking");
-  }
-  if (state.currentWaveOpen) {
-    state.currentWave.push(amplitude);
-    compactWave(state.currentWave, MAX_CURRENT_WAVE_SAMPLES);
-  }
 }
 
 function recordWaveform(input) {
@@ -153,17 +139,10 @@ function recordWaveform(input) {
   state.waveFrameSamples = 0;
 }
 
-function finishCurrentWave() {
-  if (!state.currentWaveOpen && !state.currentWave.length) return;
-  state.currentWaveOpen = false;
-  state.currentWave = [];
-  signalArea.dataset.speaking = "false";
-  setText("#current-wave-state", "Awaiting speech");
-}
-
 function drawEnvelope(context, target, values, amplitudeOf, colorOf, active) {
   const width = target.clientWidth;
   const height = target.clientHeight;
+  const centre = height / 2;
   context.clearRect(0, 0, width, height);
   if (!values.length) return;
   const bars = Math.max(1, Math.min(Math.floor(width / 5), values.length));
@@ -195,7 +174,6 @@ function drawWave() {
   drawing.fillStyle = "#141414";
   drawing.fillRect(0, 0, width, height);
   drawEnvelope(drawing, canvas, state.sessionWave, sample => sample.amplitude, sample => sample.color, Boolean(state.stream));
-  drawEnvelope(signalDrawing, signalCanvas, state.currentWave, sample => sample, () => state.accent, state.currentWaveOpen);
   state.raf = requestAnimationFrame(drawWave);
 }
 
@@ -256,7 +234,6 @@ function closeMicrophone() {
   state.context?.close();
   Object.assign(state, { stream: null, context: null, source: null, capture: null, analyser: null, mute: null, samples: [], sourceRate: 0, audioFrames: 0, inputWarningTimer: null });
   document.querySelector(".record-dot").classList.remove("active");
-  if (state.currentWaveOpen) finishCurrentWave();
   setText("#wave-copy", "Session waveform · microphone inactive");
 }
 
@@ -266,12 +243,9 @@ function resetDisplay() {
   state.liveText = "";
   state.accent = "#7aa6ff";
   state.signalStrength = .12;
-  state.currentWave = [];
   state.sessionWave = [];
   state.waveFramePeak = 0;
   state.waveFrameSamples = 0;
-  state.currentWaveOpen = false;
-  signalArea.dataset.speaking = "false";
   transcript.textContent = "Press start and speak naturally.";
   transcript.style.color = "#707070";
   meters.forEach(meter => { meter.dataset.active = "false"; meter.querySelector("strong").textContent = "—"; meter.querySelector("b").style.width = "0%"; });
@@ -281,7 +255,6 @@ function resetDisplay() {
   document.querySelector("#pressure-bar").style.width = "0%";
   setText("#stt", "STT —");
   setText("#classifier", "Text model —");
-  setText("#current-wave-state", "Awaiting speech");
   exportButton.disabled = true;
 }
 
