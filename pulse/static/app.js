@@ -75,7 +75,6 @@ function renderSentiment(result) {
   const pressure = Math.round(result.action_pressure * 100);
   setText("#pressure", pressure ? `${pressure}% urgency cue` : "No urgency cue");
   document.querySelector("#pressure-bar").style.width = `${pressure}%`;
-  setText("#pressure-detail", pressure ? "Urgency wording is present in the current transcript." : "No urgency wording is present in the current transcript.");
 }
 
 function renderEvent(event) {
@@ -259,7 +258,6 @@ function resetDisplay() {
   meters.forEach(meter => { meter.querySelector("strong").textContent = "—"; meter.querySelector("b").style.width = "0%"; });
   setText("#dominant", "Listening");
   setText("#pressure", "Waiting for speech");
-  setText("#pressure-detail", "Shown separately from sentiment when the transcript contains urgency wording.");
   document.querySelector("#pressure-bar").style.width = "0%";
   setText("#stt", "STT —");
   setText("#classifier", "Text model —");
